@@ -1,0 +1,2595 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Project Ichor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,400;0,600;0,700;1,400&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  /* ---------- Tokens ----------
+     Project Ichor is a fixed-mood dungeon interface: the whole point of the
+     game is light vs. dark, so the palette does not follow the viewer's
+     OS light/dark preference the way a document would. Both media blocks
+     below intentionally resolve to the same dark values. */
+  :root {
+    --bg: #0b0d10;
+    --panel: #14171b;
+    --panel-raised: #1b1f24;
+    --border: #272c32;
+    --text: #e9e6de;
+    --text-dim: #888e96;
+    --amber: #e8a33d;
+    --amber-dim: #6b5127;
+    --rust: #c1443c;
+    --rust-dim: #5c2b28;
+    --teal: #4a8b9c;
+    --teal-dim: #274a52;
+    --mythic: #a875e0;
+    --mythic-dim: #4a3466;
+    --font-display: 'Spectral', Georgia, 'Times New Roman', serif;
+    --font-body: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    --radius: 3px;
+  }
+  @media (prefers-color-scheme: light) {
+    :root:not([data-theme="light"]) {
+      --bg: #0b0d10; --panel: #14171b; --panel-raised: #1b1f24; --border: #272c32;
+      --text: #e9e6de; --text-dim: #888e96;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0b0d10; --panel: #14171b; --panel-raised: #1b1f24; --border: #272c32;
+    --text: #e9e6de; --text-dim: #888e96;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; overscroll-behavior: none; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-body);
+    -webkit-tap-highlight-color: transparent;
+    overflow: hidden;
+  }
+  button { font-family: var(--font-body); }
+  button:focus-visible, .card:focus-visible {
+    outline: 2px solid var(--amber); outline-offset: 2px;
+  }
+
+  #app { display: flex; flex-direction: column; height: 100vh; height: 100dvh; }
+
+  /* ---------- HUD ---------- */
+  #hud {
+    display: flex; align-items: center; gap: clamp(10px,2.5vw,22px);
+    padding: 10px clamp(10px,3vw,20px);
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+    z-index: 20;
+  }
+  #hud .title {
+    font-family: var(--font-display); font-weight: 600; font-style: italic;
+    font-size: clamp(15px, 2vw, 19px); color: var(--text); white-space: nowrap;
+  }
+  #hud .depth-tag {
+    font-size: 12px; color: var(--text-dim); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 3px 8px; white-space: nowrap;
+  }
+  #ichor-gauge { flex: 1; min-width: 100px; max-width: 280px; }
+  #ichor-gauge .label-row { display: flex; justify-content: space-between; font-size: 11px; color: var(--text-dim); margin-bottom: 3px; }
+  #ichor-gauge .bar-track { height: 8px; background: #000; border: 1px solid var(--border); border-radius: 5px; overflow: hidden; }
+  #ichor-gauge .bar-fill { height: 100%; background: linear-gradient(90deg, var(--amber-dim), var(--amber)); transition: width .35s ease; }
+  #ichor-gauge.darkness .bar-fill { background: var(--rust); }
+  #hp-mini { font-size: 12px; color: var(--text-dim); white-space: nowrap; }
+  #hp-mini b { color: var(--text); font-weight: 600; }
+  .hud-btn {
+    background: transparent; border: 1px solid var(--border); color: var(--text);
+    padding: 7px 12px; border-radius: var(--radius); cursor: pointer; font-size: 13px;
+    min-height: 36px;
+  }
+  .hud-btn:hover { border-color: var(--amber); color: var(--amber); }
+
+  /* ---------- Map viewport ---------- */
+  #map-wrap { position: relative; flex: 1; min-height: 0; background: var(--bg); }
+  #map-canvas { position: absolute; inset: 0; }
+  #darkness-banner {
+    position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
+    background: rgba(193,68,60,.15); border: 1px solid var(--rust); color: #f0b3ae;
+    padding: 6px 14px; border-radius: var(--radius); font-size: 13px; display: none;
+    text-align: center; z-index: 5; pointer-events: none;
+  }
+  #darkness-banner.show { display: block; }
+  #log-line {
+    position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%);
+    max-width: min(90vw, 480px); text-align: center; font-size: 13px; color: var(--text-dim);
+    background: rgba(20,23,27,.85); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 6px 12px; opacity: 0; transition: opacity .3s; pointer-events: none; z-index: 5;
+  }
+  #log-line.show { opacity: 1; }
+  #node-tooltip {
+    position: fixed; pointer-events: none; z-index: 55;
+    background: var(--panel-raised); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 5px 10px; font-size: 12px; color: var(--text);
+    opacity: 0; transition: opacity .12s ease; transform: translate(-8px, -115%);
+    white-space: nowrap;
+  }
+  #node-tooltip.show { opacity: 1; }
+
+  /* ---------- Overlay / modal system (event/discovery/ichor/discard/help/results) ---------- */
+  #overlay-root { position: fixed; inset: 0; z-index: 50; pointer-events: none; }
+  .scrim {
+    position: absolute; inset: 0; background: rgba(6,7,9,.72);
+    display: flex; align-items: center; justify-content: center; padding: 16px;
+    pointer-events: auto;
+  }
+  .scrim.hidden { display: none; }
+  .panel {
+    background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius);
+    max-width: 520px; width: 100%; max-height: 88vh; overflow-y: auto;
+    padding: clamp(16px,4vw,28px);
+  }
+  .panel h2 {
+    font-family: var(--font-display); font-weight: 700; font-size: clamp(20px,4vw,26px);
+    margin: 0 0 6px;
+  }
+  .panel .flavor { color: var(--text-dim); font-size: 14px; line-height: 1.55; margin: 0 0 18px; }
+  .choice-list { display: flex; flex-direction: column; gap: 8px; }
+  .choice-btn {
+    text-align: left; background: var(--panel-raised); border: 1px solid var(--border);
+    color: var(--text); padding: 12px 14px; border-radius: var(--radius); cursor: pointer;
+    font-size: 14px; line-height: 1.4;
+  }
+  .choice-btn:hover:not(:disabled) { border-color: var(--amber); }
+  .choice-btn:disabled { opacity: .45; cursor: not-allowed; }
+  .choice-btn small { display: block; color: var(--text-dim); font-size: 12px; margin-top: 3px; }
+  .primary-btn {
+    background: var(--amber); color: #1a1204; border: none; font-weight: 600;
+    padding: 12px 20px; border-radius: var(--radius); cursor: pointer; font-size: 14px;
+    min-height: 44px;
+  }
+  .primary-btn:hover { filter: brightness(1.08); }
+  .primary-btn:disabled { opacity: .4; cursor: not-allowed; filter: none; }
+  .ghost-btn {
+    background: transparent; color: var(--text-dim); border: 1px solid var(--border);
+    padding: 10px 16px; border-radius: var(--radius); cursor: pointer; font-size: 13px;
+  }
+
+  /* ---------- Item cards (equipment pool + inventory grid) ---------- */
+  .icon-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(112px,1fr)); gap: 10px; }
+  .item-icon {
+    position: relative; display: flex; flex-direction: column;
+    background: var(--panel-raised); border: 1px solid var(--border); border-radius: 8px;
+    overflow: hidden; cursor: pointer; color: var(--text); text-align: left; padding: 0;
+    min-height: 132px;
+  }
+  .item-icon:hover { border-color: var(--amber); }
+  .item-icon .card-head {
+    padding: 7px 26px 7px 9px; font-size: 12px; font-weight: 600; line-height: 1.3;
+    background: rgba(255,255,255,.03);
+    border-bottom: 3px solid #6b7078;
+  }
+  .item-icon.rarity-common .card-head { border-bottom-color: #7a7f86; }
+  .item-icon.rarity-uncommon .card-head { border-bottom-color: var(--teal); }
+  .item-icon.rarity-rare .card-head { border-bottom-color: var(--amber); }
+  .item-icon.rarity-mythic .card-head { border-bottom-color: var(--mythic); }
+  .item-icon .card-body { flex: 1; display: flex; align-items: center; justify-content: center; padding: 10px; }
+  .item-icon .card-body svg { width: 42px; height: 42px; color: var(--text-dim); }
+  .item-icon.cat-attack .card-body svg { color: var(--rust); }
+  .item-icon.cat-defense .card-body svg { color: var(--teal); }
+  .item-icon.cat-utility .card-body svg { color: var(--amber); }
+  .item-icon.in-deck, .item-icon.selected { box-shadow: inset 0 0 0 2px var(--amber); }
+  .item-icon .deck-dot { position: absolute; top: 6px; right: 6px; width: 8px; height: 8px; border-radius: 50%; background: var(--amber); }
+  .item-icon .passive-badge { position: absolute; top: 4px; left: 6px; font-size: 12px; color: var(--amber); line-height: 1; z-index: 2; }
+  .rarity-common { color: #9aa0a6; }
+  .rarity-uncommon { color: var(--teal); }
+  .rarity-rare { color: var(--amber); }
+  .rarity-mythic { color: var(--mythic); }
+
+  .card-grid { display: flex; flex-wrap: wrap; gap: 8px; }
+
+  /* ---------- Item detail bottom sheet ----------
+     Deliberately NOT a full-screen modal: no backdrop, so the item grid
+     behind it stays fully interactive. Tapping a different item just
+     re-renders the sheet's contents instead of requiring a close first. */
+  #item-sheet {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 48;
+    background: var(--panel-raised); border-top: 1px solid var(--border);
+    border-radius: 14px 14px 0 0;
+    max-height: 62vh; overflow-y: auto;
+    transform: translateY(105%);
+    transition: transform .28s cubic-bezier(.2,.8,.3,1);
+    padding: 18px clamp(16px,4vw,26px) 22px;
+    box-shadow: 0 -10px 30px rgba(0,0,0,.5);
+    pointer-events: none;
+  }
+  #item-sheet.open { transform: translateY(0); pointer-events: auto; }
+  #item-sheet .sheet-handle {
+    width: 36px; height: 4px; border-radius: 2px; background: var(--border);
+    margin: 0 auto 14px;
+  }
+
+  /* ---------- Inventory & Battle Deck screen ---------- */
+  #inv-screen { position: fixed; inset: 0; background: var(--bg); z-index: 45; display: flex; flex-direction: column; pointer-events: auto; }
+  #inv-screen.hidden { display: none; }
+  .inv-screen-head {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    padding: 14px 18px; border-bottom: 1px solid var(--border); background: var(--panel); flex-wrap: wrap;
+  }
+  .inv-screen-head-left { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .inv-screen-head h2 { font-family: var(--font-display); margin: 0; font-size: clamp(18px,3vw,22px); }
+  #deck-counter-badge { font-size: 12px; color: var(--text-dim); border: 1px solid var(--border); border-radius: var(--radius); padding: 3px 9px; }
+  #deck-counter-badge b { color: var(--amber); }
+  .inv-screen-body { flex: 1; overflow-y: auto; padding: 16px 18px 40px; }
+  .inv-section { margin-bottom: 28px; }
+  .section-head-row { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px; flex-wrap: wrap; gap: 4px; }
+  .section-head-row h3 { font-size: 15px; color: var(--text); margin: 0; font-weight: 600; }
+  .section-count { font-size: 13px; color: var(--text-dim); }
+  .dim-note { color: var(--text-dim); font-size: 13px; }
+
+  #deck-passive-list { margin-bottom: 10px; }
+  .passive-summary-title { font-size: 11px; color: var(--text-dim); margin-bottom: 5px; }
+  .passive-summary-line { font-size: 12.5px; color: var(--amber); margin-bottom: 4px; }
+  .passive-summary-line b { color: var(--text); font-weight: 600; }
+
+  .preview-head { display: flex; gap: 14px; align-items: flex-start; margin-bottom: 14px; }
+  .preview-icon { width: 44px; height: 44px; flex-shrink: 0; color: var(--amber); }
+  .preview-icon svg { width: 100%; height: 100%; }
+  .preview-explore { font-size: 12.5px; color: var(--teal); margin-top: 4px; }
+  .preview-tag { display: inline-block; font-size: 10.5px; color: var(--text-dim); border: 1px solid var(--border); border-radius: 3px; padding: 1px 6px; margin-top: 4px; margin-right: 4px; }
+  .preview-passive {
+    font-size: 12.5px; color: var(--amber); background: rgba(232,163,61,.08);
+    border: 1px solid var(--amber-dim); border-radius: var(--radius); padding: 8px 10px; margin-bottom: 14px;
+  }
+  .preview-passive b { font-family: var(--font-display); font-style: italic; }
+  .preview-cards { margin-bottom: 18px; }
+
+  /* item icon chips shown in the outcome/result modal (see showOutcomeModal) */
+  .outcome-items { display: flex; flex-wrap: wrap; gap: 10px; margin: 4px 0 6px; }
+  .outcome-item-chip {
+    display: flex; flex-direction: column; align-items: center; gap: 6px;
+    background: var(--panel-raised); border: 1px solid var(--border); border-radius: 8px;
+    padding: 10px 12px; min-width: 84px;
+  }
+  .outcome-item-chip .outcome-item-icon { width: 34px; height: 34px; color: var(--text-dim); }
+  .outcome-item-chip .outcome-item-icon svg { width: 100%; height: 100%; }
+  .outcome-item-chip.cat-attack .outcome-item-icon { color: var(--rust); }
+  .outcome-item-chip.cat-defense .outcome-item-icon { color: var(--teal); }
+  .outcome-item-chip.cat-utility .outcome-item-icon { color: var(--amber); }
+  .outcome-item-chip span { font-size: 11px; text-align: center; color: var(--text); }
+
+  /* ---------- Developer menu (testing tools) ---------- */
+  #dev-screen { position: fixed; inset: 0; background: var(--bg); z-index: 46; display: flex; flex-direction: column; pointer-events: auto; }
+  #dev-screen.hidden { display: none; }
+  .dev-screen-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 18px; border-bottom: 1px solid var(--border); background: var(--panel); flex-shrink: 0;
+  }
+  .dev-screen-head h2 { font-family: var(--font-display); margin: 0; font-size: clamp(18px,3vw,22px); }
+  .dev-screen-body { flex: 1; overflow-y: auto; padding: 16px 18px 40px; }
+  .dev-section { margin-bottom: 26px; padding-bottom: 18px; border-bottom: 1px solid var(--border); }
+  .dev-section:last-child { border-bottom: none; }
+  .dev-section h3 { font-size: 14px; color: var(--text); margin: 0 0 10px; font-weight: 600; }
+  .dev-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+  .dev-row label { font-size: 12.5px; color: var(--text-dim); min-width: 64px; }
+  .dev-input {
+    background: var(--panel-raised); border: 1px solid var(--border); color: var(--text);
+    border-radius: var(--radius); padding: 7px 9px; font-size: 13px; font-family: var(--font-body);
+    width: 90px;
+  }
+  .dev-input:disabled, .dev-needs-run:disabled { opacity: .4; cursor: not-allowed; }
+  .dev-inv-list { margin-top: 8px; display: flex; flex-direction: column; gap: 4px; max-height: 220px; overflow-y: auto; }
+  .dev-inv-row {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    background: var(--panel-raised); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 6px 10px; font-size: 12.5px;
+  }
+
+  /* ---------- Starting equipment screen ---------- */
+  #equip-screen { position: fixed; inset: 0; background: var(--bg); z-index: 45; display: flex; flex-direction: column; pointer-events: auto; }
+  #equip-screen.hidden { display: none; }
+  .equip-head { padding: 14px 18px; border-bottom: 1px solid var(--border); background: var(--panel); flex-shrink: 0; }
+  .equip-head h2 { font-family: var(--font-display); margin: 0 0 4px; font-size: clamp(18px,3vw,22px); }
+  .equip-head p { margin: 0; font-size: 13px; color: var(--text-dim); }
+  #equip-counter { font-size: 12px; color: var(--text-dim); margin-top: 8px; }
+  #equip-counter b { color: var(--amber); }
+  .equip-body { flex: 1; overflow-y: auto; padding: 16px 18px; }
+  .equip-footer { padding: 14px 18px; border-top: 1px solid var(--border); background: var(--panel); display: flex; justify-content: flex-end; flex-shrink: 0; }
+
+  /* ---------- Combat ---------- */
+  #combat-screen { position: fixed; inset: 0; background: var(--bg); z-index: 45; display: flex; flex-direction: column; pointer-events: auto; }
+  #combat-screen.hidden { display: none; }
+  #enemy-zone { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 20px; position: relative; }
+  #enemy-name { font-family: var(--font-display); font-size: clamp(20px,4vw,28px); font-weight: 600; }
+  #enemy-hp-track { width: min(70vw, 320px); height: 12px; background: #000; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+  #enemy-hp-fill { height: 100%; background: var(--rust); transition: width .3s ease; }
+  #enemy-hp-text { font-size: 12px; color: var(--text-dim); }
+  #enemy-intent {
+    margin-top: 6px; border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 8px 16px; font-size: 14px; text-align:center; min-width: 140px;
+    max-width: min(90vw, 420px); display: flex; flex-wrap: wrap; align-items: baseline;
+    justify-content: center; gap: 4px;
+  }
+  #enemy-intent .val { color: var(--rust); font-weight: 700; font-family: var(--font-display); font-size: 18px; }
+  #enemy-intent .val-heal { color: var(--teal); }
+  #enemy-intent .val-block { color: var(--teal); }
+  #enemy-intent .val-ignite { color: var(--amber); }
+  #enemy-intent .intent-plus { color: var(--text-dim); font-size: 12px; }
+  #enemy-burn-tag { font-size: 12px; color: var(--amber); margin-top: 4px; }
+  #enemy-block-tag { font-size: 12px; color: var(--teal); margin-top: 2px; }
+
+  #combat-hud {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 8px 16px; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
+    background: var(--panel);
+  }
+  #player-vitals { display: flex; gap: 16px; font-size: 13px; }
+  #player-vitals span b { color: var(--text); }
+  #energy-pips { display: flex; gap: 5px; }
+  .pip { width: 16px; height: 16px; border-radius: 50%; border: 1px solid var(--amber); }
+  .pip.filled { background: var(--amber); }
+  #end-turn-btn { background: var(--teal); color: #051216; border: none; font-weight: 600; padding: 9px 18px; border-radius: var(--radius); cursor: pointer; min-height: 40px; }
+  #end-turn-btn:hover { filter: brightness(1.1); }
+
+  #hand-zone { padding: 12px; overflow-x: auto; white-space: nowrap; display: flex; gap: 10px; align-items: flex-end; min-height: 172px; -webkit-overflow-scrolling: touch; }
+  .card {
+    display: inline-flex; flex-direction: column; justify-content: space-between;
+    width: 114px; min-width: 114px; height: 152px; white-space: normal;
+    background: var(--panel-raised); border: 1px solid var(--border); border-left-width: 4px;
+    border-radius: var(--radius); padding: 8px; cursor: pointer; vertical-align: bottom;
+    transition: transform .12s ease;
+  }
+  .card:hover:not(.disabled):not(.static) { transform: translateY(-6px); border-color: var(--amber); }
+  .card.disabled { opacity: .4; cursor: not-allowed; }
+  .card.static { cursor: default; }
+  .card.type-attack { border-left-color: var(--rust); }
+  .card.type-skill { border-left-color: var(--teal); }
+  .card .card-top { display: flex; justify-content: space-between; align-items: flex-start; }
+  .card .cost { width: 20px; height: 20px; border-radius: 50%; background: var(--amber); color: #1a1204; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .card .card-name { font-size: 12.5px; font-weight: 600; }
+  .card .card-art { flex: 1; display: flex; align-items: center; justify-content: center; margin: 2px 0; }
+  .card .card-art svg { width: 34px; height: 34px; color: var(--text-dim); }
+  .card.type-attack .card-art svg { color: var(--rust); }
+  .card.type-skill .card-art svg { color: var(--teal); }
+  .card .card-desc { font-size: 11px; color: var(--text-dim); line-height: 1.3; }
+  #pile-counts { font-size: 11px; color: var(--text-dim); padding: 0 16px 10px; text-align: right; }
+
+  /* ---------- Buttons row on start/results ---------- */
+  .btn-row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 18px; }
+  .stat-line { display: flex; justify-content: space-between; font-size: 14px; padding: 6px 0; border-bottom: 1px solid var(--border); }
+  .stat-line b { color: var(--amber); font-family: var(--font-display); }
+
+  #toast {
+    position: fixed; top: 16px; left: 50%; transform: translateX(-50%);
+    background: var(--panel-raised); border: 1px solid var(--amber); color: var(--text);
+    padding: 8px 16px; border-radius: var(--radius); font-size: 13px; z-index: 60;
+    opacity: 0; pointer-events: none; transition: opacity .3s;
+  }
+  #toast.show { opacity: 1; }
+
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+</style>
+</head>
+<body>
+
+<div id="app">
+  <div id="hud">
+    <div class="title">Project Ichor</div>
+    <div class="depth-tag" id="depth-tag">Depth —</div>
+    <div id="ichor-gauge">
+      <div class="label-row"><span>Ichor</span><span id="ichor-num">0 / 0</span></div>
+      <div class="bar-track"><div class="bar-fill" id="ichor-fill" style="width:0%"></div></div>
+    </div>
+    <div id="hp-mini">HP <b id="hp-num">—</b></div>
+    <button class="hud-btn" id="open-inv-btn">Inventory</button>
+    <button class="hud-btn" id="dev-btn">Dev</button>
+  </div>
+
+  <div id="map-wrap">
+    <div id="map-canvas"></div>
+    <div id="darkness-banner">The light is gone. <span id="darkness-moves">3</span> steps left before the dark takes you.</div>
+    <div id="log-line"></div>
+    <div id="node-tooltip"></div>
+  </div>
+</div>
+
+<div id="equip-screen" class="hidden">
+  <div class="equip-head">
+    <h2>Choose Starting Equipment</h2>
+    <p>Pick 6 of these 10 common items to carry into your expedition. Tap one to preview its cards. The rest stay behind.</p>
+    <div id="equip-counter">Selected <b id="equip-counter-num">0</b>/6</div>
+  </div>
+  <div class="equip-body"><div id="equip-icon-grid" class="icon-grid"></div></div>
+  <div class="equip-footer"><button class="primary-btn" id="equip-confirm-btn" disabled>Confirm Loadout</button></div>
+</div>
+
+<div id="inv-screen" class="hidden">
+  <div class="inv-screen-head">
+    <div class="inv-screen-head-left">
+      <h2 id="inv-screen-title">Inventory</h2>
+      <div id="deck-counter-badge">Battle Deck <b id="deck-counter-num">0</b>/6</div>
+    </div>
+    <div>
+      <button class="ghost-btn" id="inv-close-btn">Close</button>
+      <button class="primary-btn" id="inv-enter-btn" style="display:none">Enter the dungeon</button>
+    </div>
+  </div>
+  <div class="inv-screen-body">
+    <section class="inv-section">
+      <div class="section-head-row">
+        <h3>Items</h3>
+        <span class="section-count" id="inv-count-label">0/10 Items</span>
+      </div>
+      <div id="item-icon-grid" class="icon-grid"></div>
+    </section>
+    <section class="inv-section">
+      <div class="section-head-row">
+        <h3>Battle Deck</h3>
+        <span class="section-count" id="deck-count-label">0 Cards</span>
+      </div>
+      <div id="deck-passive-list"></div>
+      <div id="deck-card-grid" class="card-grid"></div>
+    </section>
+  </div>
+</div>
+
+<div id="combat-screen" class="hidden">
+  <div id="enemy-zone">
+    <div id="enemy-name">—</div>
+    <div id="enemy-hp-track"><div id="enemy-hp-fill" style="width:100%"></div></div>
+    <div id="enemy-hp-text">0 / 0</div>
+    <div id="enemy-intent">—</div>
+    <div id="enemy-burn-tag"></div>
+    <div id="enemy-block-tag"></div>
+  </div>
+  <div id="combat-hud">
+    <div id="player-vitals"><span>HP <b id="c-hp">0</b></span><span>Block <b id="c-block">0</b></span><span>Burn <b id="c-burn">0</b></span></div>
+    <div id="energy-pips"></div>
+    <button id="end-turn-btn">End turn</button>
+  </div>
+  <div id="hand-zone"></div>
+  <div id="pile-counts">Draw <span id="draw-count">0</span> · Discard <span id="discard-count">0</span></div>
+</div>
+
+<div id="overlay-root">
+  <div class="scrim" id="scrim-start"><div class="panel" id="panel-start"></div></div>
+  <div class="scrim hidden" id="scrim-generic"><div class="panel" id="panel-generic"></div></div>
+  <div class="scrim hidden" id="scrim-results"><div class="panel" id="panel-results"></div></div>
+  <div class="scrim hidden" id="scrim-discard"><div class="panel" id="panel-discard"></div></div>
+</div>
+
+<!-- Developer menu: testing tools only, never shown to a real player in
+     a shipped build. Replaces what used to be a "How to play" help
+     button — see the DEV MENU section of the script for all the wiring. -->
+<div id="dev-screen" class="hidden">
+  <div class="dev-screen-head">
+    <h2>Developer Menu</h2>
+    <button class="ghost-btn" id="dev-close-btn">Close</button>
+  </div>
+  <div class="dev-screen-body">
+
+    <section class="dev-section">
+      <h3>Resources</h3>
+      <div class="dev-row">
+        <label for="dev-hp-input">HP</label>
+        <input type="number" id="dev-hp-input" class="dev-input dev-needs-run">
+        <button class="ghost-btn dev-needs-run" id="dev-hp-set">Set</button>
+        <button class="ghost-btn dev-needs-run" id="dev-hp-full">Full heal</button>
+      </div>
+      <div class="dev-row">
+        <label for="dev-ichor-input">Ichor</label>
+        <input type="number" id="dev-ichor-input" class="dev-input dev-needs-run">
+        <button class="ghost-btn dev-needs-run" id="dev-ichor-set">Set</button>
+        <button class="ghost-btn dev-needs-run" id="dev-ichor-full">Fill to max</button>
+      </div>
+      <div class="dev-row">
+        <label for="dev-maxichor-input">Max Ichor</label>
+        <input type="number" id="dev-maxichor-input" class="dev-input">
+        <button class="ghost-btn" id="dev-maxichor-set">Set</button>
+        <button class="ghost-btn" id="dev-maxichor-reset">Reset to 10</button>
+      </div>
+      <p class="dim-note" id="dev-no-run-note">Start an expedition to edit HP/Ichor and inventory — Max Ichor and the Save tools work anytime.</p>
+    </section>
+
+    <section class="dev-section">
+      <h3>Inventory</h3>
+      <div class="dev-row">
+        <select id="dev-item-select" class="dev-input dev-needs-run" style="flex:1; min-width:160px;"></select>
+        <button class="ghost-btn dev-needs-run" id="dev-item-add">Add item</button>
+        <button class="ghost-btn dev-needs-run" id="dev-inventory-clear">Clear inventory</button>
+      </div>
+      <div id="dev-inventory-list" class="dev-inv-list"></div>
+    </section>
+
+    <section class="dev-section">
+      <h3>Map &amp; Combat</h3>
+      <div class="dev-row">
+        <button class="ghost-btn dev-needs-run" id="dev-reveal-map">Reveal entire map</button>
+        <button class="ghost-btn dev-needs-run" id="dev-toggle-darkness">Toggle darkness</button>
+        <button class="ghost-btn dev-needs-run" id="dev-win-combat">Win current combat</button>
+      </div>
+      <div class="dev-row">
+        <label for="dev-depth-input">Depth</label>
+        <input type="number" id="dev-depth-input" class="dev-input dev-needs-run" min="1" style="max-width:80px;">
+        <button class="ghost-btn dev-needs-run" id="dev-jump-depth">Jump to depth</button>
+        <button class="ghost-btn dev-needs-run" id="dev-test-drop">Test item drop at depth</button>
+      </div>
+    </section>
+
+    <section class="dev-section">
+      <h3>Save</h3>
+      <div class="dev-row">
+        <button class="ghost-btn" id="dev-reset-save">Reset ALL save data (max Ichor + refine progress)</button>
+      </div>
+    </section>
+
+  </div>
+</div>
+
+<div id="item-sheet">
+  <div class="sheet-handle"></div>
+  <div id="item-sheet-body"></div>
+</div>
+
+<div id="toast"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/phaser@3.90.0/dist/phaser.min.js"></script>
+<script>
+(function(){
+"use strict";
+
+/* =========================================================================
+   DATA
+   ========================================================================= */
+
+const CARD_DEFS = {
+  Slash:       { name:'Slash',        cost:1, type:'attack', damage:4,  desc:'Deal 4 damage.' },
+  Stab:        { name:'Stab',         cost:2, type:'attack', damage:9,  desc:'Deal 9 damage.' },
+  HeavyStrike: { name:'Heavy Strike', cost:3, type:'attack', damage:15, desc:'Deal 15 damage.' },
+  Bash:        { name:'Bash',         cost:1, type:'attack', damage:2,  desc:'Deal 2 damage.' },
+  Shoot:       { name:'Shoot',        cost:1, type:'attack', damage:3, block:3, desc:'Deal 3 damage. Gain 3 Block.' },
+  Fireball:    { name:'Fireball',     cost:2, type:'attack', damage:6, burn:3, desc:'Deal 6 damage. Apply 3 Burn.' },
+  Ignite:      { name:'Ignite',       cost:1, type:'attack', burn:3, desc:'Apply 3 Burn.' },
+  Bind:        { name:'Bind',         cost:1, type:'skill', weaken:true, desc:'Enemy deals half damage next attack.' },
+  Block:       { name:'Block',        cost:1, type:'skill', block:5,  desc:'Gain 5 Block.' },
+  ShieldWall:  { name:'Shield Wall',  cost:2, type:'skill', block:12, desc:'Gain 12 Block.' },
+  Dodge:       { name:'Dodge',        cost:1, type:'skill', block:3, draw:1, desc:'Gain 3 Block. Draw a card.' },
+  Throw:       { name:'Throw',        cost:1, type:'attack', damage:1, desc:'Deal 1 damage.' },
+  Brace:       { name:'Brace',        cost:1, type:'skill', block:2,  desc:'Gain 2 Block.' },
+  Spark:       { name:'Spark',        cost:0, type:'attack', damage:1, burn:1, desc:'Deal 1 damage. Apply 1 Burn.' },
+  // Mythic-tier signature card (see Voidglass Core below) — deliberately
+  // far above the normal attack-card power curve, to match how rare its
+  // source item is (only findable from depth 20+, see RARITY_DROP_CONFIG).
+  Voidstrike:  { name:'Voidstrike',   cost:3, type:'attack', damage:20, desc:'Deal 20 damage.' },
+};
+
+function icon(inner){
+  return `<svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${inner}</svg>`;
+}
+
+const ITEM_ICON_SVG = {
+  Longsword:      icon(`<line x1="16" y1="3" x2="16" y2="21"/><line x1="10" y1="19" x2="22" y2="19"/><line x1="16" y1="21" x2="16" y2="28"/><line x1="13" y1="28" x2="19" y2="28"/>`),
+  Greataxe:       icon(`<line x1="19" y1="4" x2="19" y2="28"/><path d="M19 6 L7 10 L11 16 L19 14 Z" fill="currentColor" stroke="none"/>`),
+  Shield:         icon(`<path d="M16 4 L26 8 V16 C26 22 21 27 16 29 C11 27 6 22 6 16 V8 Z"/>`),
+  Bow:            icon(`<path d="M11 4 C21 8 21 24 11 28"/><line x1="11" y1="4" x2="11" y2="28"/>`),
+  LeatherArmor:   icon(`<path d="M11 5 H21 L25 10 L22 27 H10 L7 10 Z"/><line x1="16" y1="9" x2="16" y2="23"/>`),
+  PlateArmor:     icon(`<path d="M9 6 H23 L26 11 L22 27 H10 L6 11 Z"/><line x1="9" y1="14" x2="23" y2="14"/><line x1="9" y1="20" x2="23" y2="20"/>`),
+  RingProtection: icon(`<circle cx="16" cy="16" r="9"/><circle cx="16" cy="16" r="3" fill="currentColor" stroke="none"/>`),
+  RingForceField: icon(`<circle cx="16" cy="16" r="6"/><circle cx="16" cy="16" r="12" stroke-dasharray="3 3"/>`),
+  FireWand:       icon(`<line x1="8" y1="27" x2="21" y2="10"/><path d="M23 4 L24.3 8 L28.5 9.5 L24.3 11 L23 15 L21.7 11 L17.5 9.5 L21.7 8 Z" fill="currentColor" stroke="none"/>`),
+  Torch:          icon(`<line x1="16" y1="16" x2="16" y2="28"/><path d="M16 4 C12 8 12 12.5 15.2 14.5 C13.5 12 15 9.3 16 8.3 C17 9.3 18.5 12 16.8 14.5 C20 12.5 20 8 16 4 Z" fill="currentColor" stroke="none"/>`),
+  Rope:           icon(`<path d="M8 24 C8 12 24 12 24 20 C24 26 12 26 12 20 C12 16 20 16 20 19"/>`),
+  FireSword:      icon(`<line x1="16" y1="9" x2="16" y2="21"/><line x1="10" y1="19" x2="22" y2="19"/><line x1="16" y1="21" x2="16" y2="28"/><line x1="13" y1="28" x2="19" y2="28"/><path d="M16 3 C13.7 6 13.7 8.3 15.6 9.4 C14.4 7.9 15.6 6.5 16 6 C16.4 6.5 17.6 7.9 16.4 9.4 C18.3 8.3 18.3 6 16 3 Z" fill="currentColor" stroke="none"/>`),
+  SharpeningStone: icon(`<rect x="8" y="12" width="16" height="7" rx="1"/><line x1="10" y1="6" x2="22" y2="22"/>`),
+  ReinforcedBuckle: icon(`<rect x="7" y="10" width="18" height="12" rx="2"/><line x1="16" y1="10" x2="16" y2="22"/><circle cx="16" cy="16" r="2" fill="currentColor" stroke="none"/>`),
+  EmberCore:      icon(`<circle cx="16" cy="17" r="8"/><path d="M16 8 C14 11 14 13 15.5 14.3 C14.8 12.8 15.5 11.5 16 11 C16.5 11.5 17.2 12.8 16.5 14.3 C18 13 18 11 16 8 Z" fill="currentColor" stroke="none"/>`),
+  VoidglassCore:  icon(`<path d="M16 3 L24 12 L20 29 L12 29 L8 12 Z"/><line x1="16" y1="3" x2="16" y2="29" opacity="0.45"/><line x1="8" y1="12" x2="24" y2="12" opacity="0.45"/>`),
+};
+
+/* Small illustrations for the combat cards themselves, so they're
+   distinguishable at a glance without reading the text. */
+const CARD_ICON_SVG = {
+  Slash:       icon(`<line x1="7" y1="25" x2="25" y2="7"/><line x1="12" y1="27" x2="27" y2="12" opacity="0.4"/>`),
+  Stab:        icon(`<line x1="7" y1="25" x2="24" y2="8"/><path d="M24 8 L17 10 M24 8 L22 15" stroke-width="1.5"/>`),
+  HeavyStrike: icon(`<line x1="16" y1="4" x2="16" y2="20" stroke-width="3.2"/><path d="M8 25 L12 20 M24 25 L20 20 M16 28 L16 23" stroke-width="1.4"/>`),
+  Bash:        icon(`<line x1="16" y1="7" x2="16" y2="11"/><line x1="16" y1="21" x2="16" y2="25"/><line x1="7" y1="16" x2="11" y2="16"/><line x1="21" y1="16" x2="25" y2="16"/><line x1="10.2" y1="10.2" x2="13" y2="13"/><line x1="19" y1="19" x2="21.8" y2="21.8"/><line x1="21.8" y1="10.2" x2="19" y2="13"/><line x1="13" y1="19" x2="10.2" y2="21.8"/>`),
+  Shoot:       icon(`<path d="M9 5 C18 10 18 22 9 27"/><line x1="9" y1="5" x2="9" y2="27"/><line x1="9" y1="16" x2="25" y2="16"/><path d="M25 16 L20 12 M25 16 L20 20" stroke-width="1.5"/>`),
+  Fireball:    icon(`<circle cx="16" cy="18" r="6.5" fill="currentColor" stroke="none" opacity="0.22"/><path d="M16 5 C12 10 12 14 15 16 C13.5 13 15 10.5 16 9.5 C17 10.5 18.5 13 17 16 C20 14 20 10 16 5 Z" fill="currentColor" stroke="none"/>`),
+  Ignite:      icon(`<path d="M16 4 C12.5 8.5 12.5 12 15.2 13.7 C13.8 11.2 15.2 9 16 8.2 C16.8 9 18.2 11.2 16.8 13.7 C19.5 12 19.5 8.5 16 4 Z" fill="currentColor" stroke="none"/>`),
+  Bind:        icon(`<circle cx="12" cy="16" r="5.5"/><circle cx="20" cy="16" r="5.5"/>`),
+  Block:       icon(`<path d="M16 4 L25 8 V16 C25 22 21 26.5 16 28.5 C11 26.5 7 22 7 16 V8 Z"/>`),
+  ShieldWall:  icon(`<path d="M12 4 L20 7.5 V15 C20 19.5 16.5 23 12 25 C7.5 23 4 19.5 4 15 V7.5 Z" opacity="0.5"/><path d="M20 6.5 L28 10 V17 C28 21.5 24.5 25.5 20 27.5 C15.5 25.5 12 21.5 12 17 V10 Z"/>`),
+  Dodge:       icon(`<path d="M6 16 C6 9.5 11 5.5 18 6.5 C24 7.5 27 12 25.5 17.5"/><path d="M25.5 17.5 L21 16 M25.5 17.5 L24.8 22" stroke-width="1.6"/>`),
+  Throw:       icon(`<circle cx="23" cy="9" r="2.6" fill="currentColor" stroke="none"/><path d="M5 24 C10.5 18.5 15.5 14.5 20 11.3" stroke-dasharray="2.6 2.6"/>`),
+  Brace:       icon(`<path d="M6 26 L16 8 L26 26"/><line x1="11" y1="18.5" x2="21" y2="18.5"/>`),
+  Spark:       icon(`<path d="M16 3 L17.6 13 L27 16 L17.6 19 L16 29 L14.4 19 L5 16 L14.4 13 Z" fill="currentColor" stroke="none"/>`),
+  // Mythic-tier signature card: a bigger, more dramatic impact than any
+  // other attack icon (a solid shard plus a wide radiating burst),
+  // matching how far above the normal power curve it sits.
+  Voidstrike:  icon(`<path d="M16 3 L22 16 L16 29 L10 16 Z" fill="currentColor" stroke="none"/><line x1="4" y1="16" x2="9" y2="16"/><line x1="23" y1="16" x2="28" y2="16"/><line x1="8" y1="8" x2="11.5" y2="11.5"/><line x1="20.5" y1="20.5" x2="24" y2="24"/><line x1="24" y1="8" x2="20.5" y2="11.5"/><line x1="11.5" y1="20.5" x2="8" y2="24"/>`),
+};
+
+const RARITY_LABEL = { common:'Common', uncommon:'Uncommon', rare:'Rare', mythic:'Mythic' };
+
+/* Every item carries a rarity (common / uncommon / rare / mythic) and a
+   category (attack / defense / utility). Categories drive the
+   starting-equipment guarantee below, and also color the item's icon in
+   the grid; rarity colors the card's header underline. Some items
+   (Sharpening Stone, Reinforced Buckle, Ember Core, Voidglass Core) also
+   carry a "passive": a static bonus applying to a specific named card
+   whenever this item is in the Battle Deck — separate from, and in
+   addition to, its own active card(s).
+
+   dropWeight (optional, defaults to 1 — see pickRewardItem below) tunes
+   how often an item is picked RELATIVE TO OTHER ITEMS OF THE SAME
+   RARITY when it drops mid-run. It has no effect on the starting-
+   equipment pool, which only ever draws from common items. Which
+   rarities are even eligible to drop, and how often each rarity is
+   picked, is controlled separately by RARITY_DROP_CONFIG further down —
+   change weights in either place freely; nothing else needs to change. */
+const ITEM_DEFS = {
+  Longsword:        { name:'Longsword',         rarity:'common',   category:'attack',  dropWeight:1, cards:[['Slash',3],['Stab',2]] },
+  Greataxe:         { name:'Greataxe',          rarity:'uncommon', category:'attack',  dropWeight:1, cards:[['HeavyStrike',3],['Bash',2]], exploration:'Can destroy certain obstacles.' },
+  Shield:           { name:'Shield',            rarity:'common',   category:'defense', dropWeight:1, cards:[['Block',3],['ShieldWall',1],['Bash',1]], exploration:'Can protect against certain hazards.' },
+  Bow:              { name:'Bow',               rarity:'common',   category:'attack',  dropWeight:1, cards:[['Shoot',3]], exploration:'Can interact with distant objects.' },
+  LeatherArmor:     { name:'Leather Armor',     rarity:'common',   category:'defense', dropWeight:1, cards:[['Block',2],['Dodge',2]] },
+  PlateArmor:       { name:'Plate Armor',       rarity:'uncommon', category:'defense', dropWeight:1, cards:[['Block',4]] },
+  RingProtection:   { name:'Ring of Protection',rarity:'common',   category:'defense', dropWeight:1, cards:[['Block',2]] },
+  // example of a lighter drop weight: still Rare, but drops about 60% as
+  // often as an equal-weight (1.0) Rare item like Fire Sword would
+  RingForceField:   { name:'Ring of Force Field',rarity:'rare',    category:'defense', dropWeight:0.6, cards:[['ShieldWall',1]] },
+  FireWand:         { name:'Fire Wand',         rarity:'uncommon', category:'attack',  dropWeight:1, cards:[['Ignite',3],['Fireball',1]], exploration:'Can interact with objects requiring fire.' },
+  // example of a heavier drop weight: a common utility item that shows
+  // up noticeably more than an equal-tier item at the default weight
+  Torch:            { name:'Torch',             rarity:'common',   category:'utility', dropWeight:1.4, cards:[['Ignite',1]], exploration:'Can interact with objects requiring fire.' },
+  Rope:             { name:'Rope',              rarity:'common',   category:'utility', dropWeight:1, cards:[['Bind',1]], exploration:'Can cross gaps and descend through shafts.', consumable:true },
+  FireSword:        { name:'Fire Sword',        rarity:'rare',     category:'attack',  dropWeight:1, cards:[['Slash',2],['Stab',2],['Ignite',2]], exploration:'Can interact with objects requiring fire.' },
+
+  SharpeningStone:  { name:'Sharpening Stone',  rarity:'uncommon', category:'attack',  dropWeight:1, cards:[['Throw',2]],
+                      passive:{ desc:'Slash deals 2 additional damage.', mods:[{card:'Slash', damage:2}] } },
+  ReinforcedBuckle: { name:'Reinforced Buckle', rarity:'uncommon', category:'defense', dropWeight:1, cards:[['Brace',2]],
+                      passive:{ desc:'Block grants 2 additional Block.', mods:[{card:'Block', block:2}] } },
+  EmberCore:        { name:'Ember Core',        rarity:'rare',     category:'attack',  dropWeight:1, cards:[['Spark',1]],
+                      passive:{ desc:'Ignite and Fireball apply 2 additional Burn.', mods:[{card:'Ignite', burn:2},{card:'Fireball', burn:2}] } },
+
+  // Mythic-tier example item: only ever eligible to drop from depth 20+
+  // (see RARITY_DROP_CONFIG). Deliberately a step above Rare in both its
+  // active card (Voidstrike, a flat 20 damage hit) and its passive.
+  VoidglassCore:    { name:'Voidglass Core',    rarity:'mythic',   category:'attack',  dropWeight:1, cards:[['Voidstrike',1]],
+                      passive:{ desc:'Slash and Stab deal 3 additional damage.', mods:[{card:'Slash', damage:3},{card:'Stab', damage:3}] } },
+};
+
+
+/* =========================================================================
+   ENEMY BEHAVIOR PATTERNS
+
+   Each enemy follows a fixed `pattern` instead of picking randomly:
+   - `first`: what it does on its very first turn.
+   - `cycle`: a list of turns it repeats afterward, in order, looping back
+     to the start once it reaches the end (turn 2 = cycle[0], turn 3 =
+     cycle[1], ... turn (cycle.length+2) = cycle[0] again).
+   Both `first` and any entry in `cycle` are ARRAYS of one or more
+   actions that all happen together on that turn — e.g. an attack and a
+   block in the same turn, not one-action-per-turn. Supported action
+   types: 'attack' (damage to the player), 'heal' (enemy heals itself),
+   'block' (enemy gains Block — see resolveEnemyActions/playCard for how
+   it absorbs the player's next attacks, exactly like the player's own
+   Block), and 'ignite' (applies Burn to the PLAYER, ticking at the start
+   of the player's next turn — see startPlayerTurn). See chooseNextIntent
+   for how `enemy.turnIndex` walks through first/cycle.
+   ========================================================================= */
+const ENEMY_DEFS = [
+  { key:'skeleton', name:'Skeleton Guard', hp:24, pattern:{
+      first: [ {type:'attack', value:10} ],
+      cycle: [
+        [ {type:'attack', value:8} ],
+        [ {type:'block', value:6} ],
+        [ {type:'attack', value:6}, {type:'block', value:4} ],
+      ],
+    } },
+  { key:'cultist',  name:'Cultist',        hp:18, pattern:{
+      first: [ {type:'attack', value:6} ],
+      cycle: [
+        [ {type:'heal', value:6} ],
+        [ {type:'ignite', value:3} ],
+        [ {type:'attack', value:5}, {type:'ignite', value:2} ],
+      ],
+    } },
+  { key:'rat',      name:'Cave Rat',       hp:14, pattern:{
+      first: [ {type:'attack', value:6} ],
+      cycle: [
+        [ {type:'attack', value:4} ],
+        [ {type:'attack', value:4}, {type:'block', value:2} ],
+      ],
+    } },
+  { key:'lurker',   name:'Bog Lurker',     hp:20, pattern:{
+      first: [ {type:'attack', value:8} ],
+      cycle: [
+        [ {type:'block', value:8} ],
+        [ {type:'attack', value:7} ],
+        [ {type:'attack', value:5}, {type:'block', value:5} ],
+      ],
+    } },
+];
+const ELITE_DEFS = [
+  { key:'warden', name:'Bound Warden', hp:45, pattern:{
+      first: [ {type:'attack', value:12} ],
+      cycle: [
+        [ {type:'attack', value:10}, {type:'block', value:8} ],
+        [ {type:'ignite', value:4} ],
+        [ {type:'heal', value:10} ],
+        [ {type:'attack', value:14}, {type:'ignite', value:3} ],
+      ],
+    } },
+];
+
+// Every choice's run() receives the map node it happened at, so outcomes
+// that grant items (grantRandomItem) can pass the node's depth through —
+// that's what determines which rarities are eligible to drop there (see
+// RARITY_DROP_CONFIG). Choices that don't grant anything simply ignore
+// the parameter.
+const EVENTS = [
+  { id:'bridge', title:'Cracked Bridge', flavor:'The bridge ahead has collapsed into a black chasm. There is a narrow, treacherous way across.',
+    choices:[
+      { label:'Cross carefully', sub:'Risk injury on loose stone.', run:(node)=>{ dealPlayerDamage(6); log('You slip and take a hard fall — 6 HP lost.'); } },
+      { label:'Use Rope to cross safely', sub:'Consumes the Rope.', requires:()=>hasItem('Rope'), run:(node)=>{ consumeItem('Rope'); log('The rope holds. You cross without a scratch.'); } },
+    ]},
+  { id:'altar', title:'Strange Altar', flavor:'A small stone altar hums faintly. Something is waiting to be disturbed.',
+    choices:[
+      { label:'Leave it alone', sub:'Nothing happens.', run:(node)=>{ log('You step back. The hum fades.'); } },
+      { label:'Touch it', sub:'Unknown effect.', run:(node)=>{
+          if (Math.random()<0.5){ const it=grantRandomItem(node.depth); log(`Something is pressed into your hand: ${ITEM_DEFS[it].name}.`); }
+          else { dealPlayerDamage(5); log('A shock runs through you — 5 HP lost.'); }
+        }},
+    ]},
+  { id:'traveler', title:'Wounded Traveler', flavor:'A stranger sits slumped against the tunnel wall, bleeding from an old wound.',
+    choices:[
+      { label:'Help them', sub:'Costs 3 HP, they share something useful.', run:(node)=>{ dealPlayerDamage(3); addIchor(4); log('They press a vial of Ichor into your hand before you go.'); } },
+      { label:'Move on', sub:'Nothing happens.', run:(node)=>{ log('You leave them to the dark.'); } },
+    ]},
+  { id:'slick', title:'Ichor-Slick Floor', flavor:'The floor here is coated in a thin, glistening film of raw Ichor.',
+    choices:[
+      { label:'Walk carefully', sub:'Nothing happens.', run:(node)=>{ log('You pick your way across without incident.'); } },
+      { label:'Scoop up what you can', sub:'Risk a slip.', run:(node)=>{
+          if (Math.random()<0.6){ addIchor(3); log('You scoop up a little extra Ichor.'); }
+          else { dealPlayerDamage(4); log('You slip and land hard — 4 HP lost.'); }
+        }},
+    ]},
+];
+
+const DISCOVERIES = [
+  { id:'alcove', title:'Hidden Alcove', flavor:'A narrow crack opens into a small alcove, untouched by other delvers.',
+    run:(node)=>{ const it=grantRandomItem(node.depth); log(`You find: ${ITEM_DEFS[it].name}.`); } },
+  { id:'cache', title:'Sealed Cache', flavor:'A rusted container, wedged into the rock, still sealed.',
+    special:{ needsItem:'Greataxe', bonusText:'Your Greataxe cracks it open cleanly, spilling out extra salvage.' },
+    run:(node)=>{
+      const it=grantRandomItem(node.depth); log(`You find: ${ITEM_DEFS[it].name}.`);
+      if (hasItem('Greataxe')){ const it2=grantRandomItem(node.depth); log(`The Greataxe splits it wide open — also: ${ITEM_DEFS[it2].name}.`); }
+    } },
+];
+
+/* =========================================================================
+   STATE
+
+   Inventory is stored as a list of { uid, key } instances (not bare item
+   keys) so that duplicate items — the design explicitly allows carrying
+   more than one copy of the same item — can be told apart. The Battle
+   Deck references those uids, so adding/removing a specific physical
+   copy is unambiguous even when you own several of the same item.
+   ========================================================================= */
+
+const SAVE_KEY = 'ichor_save_v1';
+function loadSave(){
+  try {
+    const raw = localStorage.getItem(SAVE_KEY);
+    if (!raw) return { maxIchor:10, usedIchorDepths:[] };
+    const parsed = JSON.parse(raw);
+    return { maxIchor: parsed.maxIchor||10, usedIchorDepths: parsed.usedIchorDepths||[] };
+  } catch(e){ return { maxIchor:10, usedIchorDepths:[] }; }
+}
+function persistSave(){
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify({ maxIchor: save.maxIchor, usedIchorDepths: save.usedIchorDepths })); }
+  catch(e){ /* storage unavailable — run continues in-memory only */ }
+}
+
+let save = loadSave();
+
+// The dungeon grid has this many rows (see GRID_ROWS below, which is
+// tied directly to this constant) — raised from the original 5 so the
+// depth-gated rarity tiers in RARITY_DROP_CONFIG (Uncommon at 5+, Rare at
+// 10+, Mythic at 20+) all actually have room to matter over a full run.
+const MAX_DEPTH = 25;
+const PLAYER_MAX_HP = 50;
+
+let run = null; // per-expedition state, built by newExpeditionState()
+let mapScene = null;
+let game = null;
+let invScreenMode = 'drawer'; // 'drawer' (mid-run) or 'loadout' (pre-run)
+
+function newExpeditionState(chosenKeys){
+  let uidSeq = 0;
+  const inventory = chosenKeys.map(key => ({ uid: 'i'+(uidSeq++), key }));
+  const battleDeck = inventory.slice(0,6).map(it=>it.uid);
+  return {
+    maxIchor: save.maxIchor,
+    ichor: save.maxIchor,
+    hp: PLAYER_MAX_HP,
+    inventory,
+    battleDeck,
+    itemUidSeq: uidSeq,
+    nodes: {},
+    currentNodeId: null,
+    darkness: false,
+    darknessMovesLeft: 3,
+    nodesExploredCount: 0,
+    ichorNodesDiscoveredCount: 0,
+    maxDepthReached: 1,
+    over: false,
+  };
+}
+
+/* =========================================================================
+   STARTING EQUIPMENT POOL
+   Draws 10 common items, guaranteeing at least 2 attack, 2 defense and
+   2 utility options so the player always has a viable choice in every
+   category, then tops the pool up to 10 with random commons (allowing
+   duplicates, same as inventory already does).
+   ========================================================================= */
+
+function buildStartingPool(){
+  const commons = Object.keys(ITEM_DEFS).filter(k=>ITEM_DEFS[k].rarity==='common');
+  const byCategory = cat => commons.filter(k=>ITEM_DEFS[k].category===cat);
+  const pool = [];
+  ['attack','defense','utility'].forEach(cat=>{
+    const options = shuffle(byCategory(cat));
+    options.slice(0, Math.min(2, options.length)).forEach(key=>pool.push(key));
+  });
+  while (pool.length < 10){
+    pool.push(commons[Math.floor(Math.random()*commons.length)]);
+  }
+  return shuffle(pool).map((key,i)=>({ puid:'p'+i, key }));
+}
+
+/* =========================================================================
+   MAP GENERATION
+
+   A fixed grid of cells (rows = depth, columns = horizontal position).
+   Each cell has a 20% chance of being empty (no node at all). Every
+   remaining cell only ever connects to its Moore-neighborhood (the up to
+   8 cells directly touching it — left/right/up/down and the 4 diagonals),
+   so no connection ever spans more than one grid step: this is what keeps
+   the drawing simple, since a straight line is always correct and two
+   connections can never overlap the way long same-row "skip" edges used
+   to. Each node independently rolls a target connection count from the
+   requested distribution and links to that many of its available
+   neighbors; a cheap connectivity pass afterward guarantees the whole
+   map stays reachable from the start.
+   ========================================================================= */
+
+const GRID_ROWS = MAX_DEPTH;
+const GRID_COLS = 10;
+const EMPTY_CELL_CHANCE = 0.20;
+const MOORE_DELTAS = [[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]];
+const START_COL = Math.floor(GRID_COLS/2);
+
+function rollConnectionTarget(){
+  const r = Math.random();
+  if (r < 0.05) return 1;        // 5%
+  if (r < 0.25) return 2;        // 20%
+  if (r < 0.75) return 3;        // 50%
+  if (r < 0.95) return 4;        // 20%
+  return 5;                      // 5%
+}
+
+// true/false grid of which cells hold a node. Since a node may only ever
+// connect to a Moore-adjacent cell, the whole map is only playable if
+// every non-empty cell can reach every other through that adjacency —
+// otherwise it'd need a "teleport" connection to bridge two pockets,
+// which would violate "only neighboring cells" the moment it happened.
+// So instead of ever drawing such a connection, this just re-rolls which
+// cells are empty until the resulting layout is fully connected on its
+// own (typically succeeds within 1-2 tries at a 20% empty rate).
+function buildConnectedEmptinessGrid(){
+  function build(){
+    const grid = [];
+    for (let row=0; row<GRID_ROWS; row++){
+      grid.push(new Array(GRID_COLS).fill(false));
+      for (let col=0; col<GRID_COLS; col++){
+        const forcedStart = row===0 && col===START_COL;
+        grid[row][col] = forcedStart || Math.random() >= EMPTY_CELL_CHANCE;
+      }
+      // an entirely empty row would break the depth mechanic (no Ichor
+      // node possible there, nothing to move through) — force one cell back
+      if (grid[row].every(v=>!v)) grid[row][Math.floor(Math.random()*GRID_COLS)] = true;
+    }
+    return grid;
+  }
+  function isFullyConnected(grid){
+    let total = 0;
+    for (let r=0;r<GRID_ROWS;r++) for (let c=0;c<GRID_COLS;c++) if (grid[r][c]) total++;
+    const seen = new Set([`0,${START_COL}`]);
+    const queue = [[0,START_COL]];
+    while (queue.length){
+      const [r,c] = queue.pop();
+      MOORE_DELTAS.forEach(([dr,dc])=>{
+        const nr=r+dr, nc=c+dc;
+        if (nr>=0 && nr<GRID_ROWS && nc>=0 && nc<GRID_COLS && grid[nr][nc]){
+          const key = `${nr},${nc}`;
+          if (!seen.has(key)){ seen.add(key); queue.push([nr,nc]); }
+        }
+      });
+    }
+    return seen.size === total;
+  }
+  for (let attempt=0; attempt<30; attempt++){
+    const grid = build();
+    if (isFullyConnected(grid)) return grid;
+  }
+  // astronomically unlikely with 30 tries at ~95% success each, but never
+  // leave the game unplayable: fill the whole grid, trivially connected
+  return Array.from({length:GRID_ROWS}, ()=> new Array(GRID_COLS).fill(true));
+}
+
+function generateMap(){
+  const grid = buildConnectedEmptinessGrid();
+  const nodes = {};
+  for (let row=0; row<GRID_ROWS; row++){
+    for (let col=0; col<GRID_COLS; col++){
+      if (!grid[row][col]) continue;
+      const id = `r${row}c${col}`;
+      nodes[id] = { id, depth: row+1, row, col, slot: col, type:null, connections:[], gridNeighbors:[], cleared:false, x:0, y:0 };
+    }
+  }
+  const startId = `r0c${START_COL}`;
+
+  // every non-empty Moore-neighbor, used for the random linking pass below
+  Object.values(nodes).forEach(n=>{
+    MOORE_DELTAS.forEach(([dr,dc])=>{
+      const r=n.row+dr, c=n.col+dc;
+      if (r>=0 && r<GRID_ROWS && c>=0 && c<GRID_COLS && grid[r][c]) n.gridNeighbors.push(`r${r}c${c}`);
+    });
+  });
+
+  // each node independently rolls how many connections it wants (1-5,
+  // weighted per spec) and links to that many random available neighbors.
+  // A node's final degree can end up a little higher than its own roll
+  // when a neighbor separately rolls a connection back to it — that's
+  // expected and left as-is, in the spirit of keeping this simple.
+  Object.values(nodes).forEach(n=>{
+    const target = rollConnectionTarget();
+    shuffle(n.gridNeighbors).slice(0, target).forEach(nb => link(nodes, n.id, nb));
+  });
+
+  // the emptiness grid is already guaranteed fully connected by adjacency
+  // (see buildConnectedEmptinessGrid), so this should be a no-op in
+  // practice — kept as a defensive backstop, still adjacency-only.
+  ensureConnectivity(nodes, startId);
+
+  // Two diagonal connections can still cross each other in an X inside
+  // the same 2x2 block of cells (e.g. top-left↔bottom-right AND
+  // top-right↔bottom-left both present). Drop one side of every such
+  // pair, preferring whichever removal doesn't disconnect anything.
+  removeCrossingDiagonals(nodes, grid, startId);
+  ensureConnectivity(nodes, startId); // re-check; removal is guarded so this should also be a no-op
+
+  // assign types
+  nodes[startId].type = 'start';
+  for (const id in nodes){
+    if (nodes[id].type) continue;
+    const depth = nodes[id].depth;
+    const roll = Math.random();
+    if (roll < 0.15 && !hasTypeInLevel(nodes, depth, 'ichor')){
+      nodes[id].type = 'ichor';
+    } else if (depth>=2 && roll < 0.28){
+      nodes[id].type = 'elite';
+    } else if (roll < 0.55){
+      nodes[id].type = 'combat';
+    } else if (roll < 0.8){
+      nodes[id].type = 'event';
+    } else {
+      nodes[id].type = 'discovery';
+    }
+  }
+  // guarantee exactly one ichor node per level
+  for (let depth=1; depth<=MAX_DEPTH; depth++){
+    if (!hasTypeInLevel(nodes, depth, 'ichor')){
+      const candidates = Object.values(nodes).filter(n=>n.depth===depth && n.type!=='start');
+      if (candidates.length) candidates[Math.floor(Math.random()*candidates.length)].type = 'ichor';
+    }
+  }
+
+  // layout coordinates straight from grid position — every connection now
+  // spans exactly one grid step, so there's no need for the old jittered
+  // per-row centering; a fixed grid with a touch of jitter reads cleanly.
+  const LEVEL_H = 160, SLOT_W = 150;
+  const gridWidth = (GRID_COLS-1) * SLOT_W;
+  Object.values(nodes).forEach(n=>{
+    n.x = 450 - gridWidth/2 + n.col*SLOT_W + (Math.random()*20-10);
+    n.y = 90 + n.row*LEVEL_H + (Math.random()*20-10);
+  });
+
+  return nodes;
+}
+function link(nodes, a, b){
+  if (a===b) return;
+  if (!nodes[a].connections.includes(b)) nodes[a].connections.push(b);
+  if (!nodes[b].connections.includes(a)) nodes[b].connections.push(a);
+}
+function hasTypeInLevel(nodes, depth, type){
+  return Object.values(nodes).some(n=>n.depth===depth && n.type===type);
+}
+// Defensive backstop only (see generateMap): pulls in any node the random
+// linking pass left unreached via one of its real grid-neighbors — never
+// a non-adjacent "teleport" link — one at a time until everything's
+// reachable from the start.
+function ensureConnectivity(nodes, startId){
+  function reachableSet(){
+    const seen = new Set([startId]);
+    const queue = [startId];
+    while (queue.length){
+      const cur = queue.pop();
+      nodes[cur].connections.forEach(nb=>{ if (!seen.has(nb)){ seen.add(nb); queue.push(nb); } });
+    }
+    return seen;
+  }
+  const allIds = Object.keys(nodes);
+  let reachable = reachableSet();
+  let guard = 0;
+  while (reachable.size < allIds.length && guard++ < 500){
+    let linked = false;
+    for (const id of allIds){
+      if (reachable.has(id)) continue;
+      const nb = nodes[id].gridNeighbors.find(g=>reachable.has(g));
+      if (nb){ link(nodes, id, nb); linked = true; break; }
+    }
+    if (!linked) break; // shouldn't happen given a pre-validated grid
+    reachable = reachableSet();
+  }
+}
+function unlink(nodes, a, b){
+  nodes[a].connections = nodes[a].connections.filter(x=>x!==b);
+  nodes[b].connections = nodes[b].connections.filter(x=>x!==a);
+}
+// Would removing edge a-b leave some node unable to reach the start?
+// Used to pick the safe side of a crossing pair to drop.
+function wouldDisconnect(nodes, startId, a, b){
+  unlink(nodes, a, b);
+  const seen = new Set([startId]);
+  const queue = [startId];
+  while (queue.length){
+    const cur = queue.pop();
+    nodes[cur].connections.forEach(nb=>{ if (!seen.has(nb)){ seen.add(nb); queue.push(nb); } });
+  }
+  const disconnected = seen.size < Object.keys(nodes).length;
+  link(nodes, a, b); // restore — this function only inspects, never commits
+  return disconnected;
+}
+// A diagonal a-d ("\") and a diagonal b-c ("/") inside the same 2x2 block
+// of cells visually cross each other in an X. At most one of the two may
+// exist at a time; when both do, drop whichever removal is safe (doesn't
+// disconnect anything). In the astronomically rare case neither removal
+// is safe, the crossing is left in place rather than breaking the map.
+function removeCrossingDiagonals(nodes, grid, startId){
+  for (let row=0; row<GRID_ROWS-1; row++){
+    for (let col=0; col<GRID_COLS-1; col++){
+      if (!grid[row][col] || !grid[row][col+1] || !grid[row+1][col] || !grid[row+1][col+1]) continue;
+      const a = `r${row}c${col}`, b = `r${row}c${col+1}`, c = `r${row+1}c${col}`, d = `r${row+1}c${col+1}`;
+      const hasBackslash = nodes[a].connections.includes(d); // top-left to bottom-right
+      const hasSlash = nodes[b].connections.includes(c);     // top-right to bottom-left
+      if (hasBackslash && hasSlash){
+        if (!wouldDisconnect(nodes, startId, a, d)) unlink(nodes, a, d);
+        else if (!wouldDisconnect(nodes, startId, b, c)) unlink(nodes, b, c);
+      }
+    }
+  }
+}
+
+/* =========================================================================
+   LOOT RARITY / DROP-CHANCE CONFIGURATION
+
+   How deep the player has gone controls which rarities can even drop,
+   and how heavily each currently-unlocked rarity is weighted against the
+   others. A rarity only becomes eligible once the player has reached its
+   minDepth (cumulative — deeper tiers add on top of shallower ones, they
+   don't replace them), then it competes with the other eligible rarities
+   by "weight" (bigger number = picked more often; these are relative to
+   each other, not percentages, and don't need to add up to any total).
+   Edit minDepth/weight here to retune the whole curve without touching
+   any other code. Per-item weighting WITHIN a rarity is a separate knob:
+   see the dropWeight field on each item in ITEM_DEFS above.
+   ========================================================================= */
+const RARITY_DROP_CONFIG = {
+  common:   { minDepth: 1,  weight: 100 },
+  uncommon: { minDepth: 5,  weight: 40  },
+  rare:     { minDepth: 10, weight: 15  },
+  mythic:   { minDepth: 20, weight: 3   },
+};
+
+// Picks one item key for a mid-run reward, respecting both which
+// rarities are unlocked at this depth (RARITY_DROP_CONFIG) and each
+// item's own relative weight within its rarity (ITEM_DEFS[key].dropWeight,
+// default 1). Two-stage weighted roll: first pick a rarity tier, then
+// pick an item inside that tier.
+function pickRewardItem(depth){
+  const unlockedTiers = Object.entries(RARITY_DROP_CONFIG)
+    .filter(([, cfg]) => depth >= cfg.minDepth)
+    .map(([rarity, cfg]) => ({ rarity, weight: cfg.weight }));
+
+  // Common always starts at depth 1, so this should never be empty in
+  // practice — but fall back to every item rather than crash if some
+  // future edit to RARITY_DROP_CONFIG ever left nothing unlocked.
+  if (!unlockedTiers.length){
+    const allKeys = Object.keys(ITEM_DEFS);
+    return allKeys[Math.floor(Math.random()*allKeys.length)];
+  }
+
+  const totalTierWeight = unlockedTiers.reduce((sum,t)=>sum+t.weight, 0);
+  let tierRoll = Math.random() * totalTierWeight;
+  let chosenRarity = unlockedTiers[unlockedTiers.length-1].rarity; // fallback for float rounding
+  for (const t of unlockedTiers){
+    if (tierRoll < t.weight){ chosenRarity = t.rarity; break; }
+    tierRoll -= t.weight;
+  }
+
+  const pool = Object.keys(ITEM_DEFS).filter(k => ITEM_DEFS[k].rarity === chosenRarity);
+  const totalItemWeight = pool.reduce((sum,k)=> sum + (ITEM_DEFS[k].dropWeight ?? 1), 0);
+  let itemRoll = Math.random() * totalItemWeight;
+  for (const key of pool){
+    const w = ITEM_DEFS[key].dropWeight ?? 1;
+    if (itemRoll < w) return key;
+    itemRoll -= w;
+  }
+  return pool[pool.length-1];
+}
+
+/* =========================================================================
+   HELPERS: inventory / ichor / hp / log
+   ========================================================================= */
+
+function hasItem(key){ return run.inventory.some(it=>it.key===key); }
+function consumeItem(key){
+  const idx = run.inventory.findIndex(it=>it.key===key);
+  if (idx>=0){
+    const [removed] = run.inventory.splice(idx,1);
+    run.battleDeck = run.battleDeck.filter(uid=>uid!==removed.uid);
+  }
+  renderHud();
+}
+// grantedItemsBuffer mirrors logBuffer (see log()/flushLogBuffer() below):
+// every item granted through grantRandomItem() during a single action
+// (a combat win, an event's outcome, etc.) is collected here so the
+// result modal can show its actual icon, not just its name in a sentence.
+let grantedItemsBuffer = [];
+function flushGrantedItems(){
+  const items = grantedItemsBuffer;
+  grantedItemsBuffer = [];
+  return items;
+}
+// depth: the dungeon depth the reward was found at — determines which
+// rarities are even possible (see RARITY_DROP_CONFIG above).
+function grantRandomItem(depth){
+  const key = pickRewardItem(depth);
+  addItemToInventory(key);
+  grantedItemsBuffer.push(key);
+  return key;
+}
+function addItemToInventory(key){
+  if (run.inventory.length < 10){
+    run.inventory.push({ uid:'i'+(run.itemUidSeq++), key });
+    renderHud();
+  } else {
+    showDiscardChoice(key);
+  }
+}
+function addIchor(n){
+  run.ichor = Math.min(run.maxIchor, run.ichor + n);
+  updateDarknessState();
+  renderHud();
+}
+function dealPlayerDamage(n){
+  run.hp = Math.max(0, run.hp - n);
+  renderHud();
+  if (run.hp<=0) endExpedition('death');
+}
+let logBuffer = [];
+function log(msg){
+  logBuffer.push(msg);
+  const el = document.getElementById('log-line');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(log._t);
+  log._t = setTimeout(()=>el.classList.remove('show'), 3200);
+}
+// Every combat win, event choice and discovery already calls log() with a
+// clear description of what happened — the small bottom banner just
+// wasn't enough for something as significant as "you found an item" or
+// "you lost HP". Rather than write a second, separate description for
+// every one of those outcomes, a resolution buffers whatever it logs
+// (see flushLogBuffer) and shows the same text in a proper modal.
+function flushLogBuffer(){
+  const msgs = logBuffer;
+  logBuffer = [];
+  return msgs;
+}
+// messages: array of strings from flushLogBuffer(). grantedKeys (optional):
+// array of item keys from flushGrantedItems() — rendered as icon chips
+// (matching the inventory's item-icon look) so a found item is shown
+// visually, not just named in a sentence.
+function showOutcomeModal(title, messages, grantedKeys){
+  grantedKeys = grantedKeys || [];
+  const itemsHtml = grantedKeys.length ? `
+    <div class="outcome-items">
+      ${grantedKeys.map(key=>{
+        const def = ITEM_DEFS[key];
+        return `<div class="outcome-item-chip cat-${def.category}">
+          <div class="outcome-item-icon">${ITEM_ICON_SVG[key]}</div>
+          <span>${def.name}</span>
+        </div>`;
+      }).join('')}
+    </div>
+  ` : '';
+  const panel = document.getElementById('panel-generic');
+  panel.innerHTML = `
+    <h2>${title}</h2>
+    ${messages.map(m=>`<p class="flavor">${m}</p>`).join('')}
+    ${itemsHtml}
+    <div class="btn-row"><button class="primary-btn" id="outcome-continue">Continue</button></div>
+  `;
+  showScrim('scrim-generic');
+  document.getElementById('outcome-continue').onclick = ()=> hideScrim('scrim-generic');
+}
+function toast(msg){
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toast._t);
+  toast._t = setTimeout(()=>el.classList.remove('show'), 2200);
+}
+// count (optional): when > 1, prefixes the card's name with "3×" etc.
+// instead of rendering that many separate identical tiles — used by the
+// item-preview sheet (buildPreviewBodyHtml) to keep a multi-copy card
+// (e.g. Longsword's 3× Slash) to a single, compact illustration. The
+// Battle Deck grid and the combat hand call this WITHOUT a count, since
+// there each tile represents one physical card instance and should stay
+// one-tile-per-copy.
+function cardTileHtml(cardId, count){
+  const def = CARD_DEFS[cardId];
+  const prefix = (count && count > 1) ? `${count}×` : '';
+  return `<div class="card type-${def.type} static">
+    <div class="card-top"><span class="card-name">${prefix}${def.name}</span><span class="cost">${def.cost}</span></div>
+    <div class="card-art">${CARD_ICON_SVG[cardId]}</div>
+    <div class="card-desc">${def.desc}</div>
+  </div>`;
+}
+function countDeckCards(){
+  const items = run.battleDeck.map(uid=>run.inventory.find(it=>it.uid===uid)).filter(Boolean);
+  let total = 0;
+  items.forEach(item=> ITEM_DEFS[item.key].cards.forEach(([,count])=> total+=count));
+  return total;
+}
+
+/* =========================================================================
+   HUD RENDER
+   ========================================================================= */
+
+function renderHud(){
+  if (!run) return;
+  document.getElementById('depth-tag').textContent = run.currentNodeId ? `Depth ${run.nodes[run.currentNodeId].depth}` : 'Depth —';
+  document.getElementById('ichor-num').textContent = `${run.ichor} / ${run.maxIchor}`;
+  document.getElementById('ichor-fill').style.width = `${(run.ichor/run.maxIchor*100).toFixed(0)}%`;
+  document.getElementById('hp-num').textContent = `${run.hp} / ${PLAYER_MAX_HP}`;
+  document.getElementById('ichor-gauge').classList.toggle('darkness', run.darkness);
+  document.getElementById('darkness-banner').classList.toggle('show', run.darkness);
+  document.getElementById('darkness-moves').textContent = run.darknessMovesLeft;
+  renderInventoryScreen();
+}
+
+/* =========================================================================
+   ITEM DETAIL BOTTOM SHEET
+   Shared by the starting-equipment pool and the mid-run Inventory screen.
+   No backdrop: the grid behind stays fully tappable, so switching which
+   item you're inspecting never requires closing anything first.
+   ========================================================================= */
+
+function openItemSheet(bodyHtml){
+  document.getElementById('item-sheet-body').innerHTML = bodyHtml;
+  document.getElementById('item-sheet').classList.add('open');
+}
+function closeItemSheet(){
+  document.getElementById('item-sheet').classList.remove('open');
+}
+
+function buildPreviewBodyHtml(key){
+  const def = ITEM_DEFS[key];
+  // one tile per DISTINCT card, with a "3×" count prefix rather than one
+  // tile per physical copy — keeps the preview compact (see cardTileHtml)
+  const cardTiles = def.cards.map(([cardId,count]) => cardTileHtml(cardId, count));
+  return `
+    <div class="preview-head">
+      <div class="preview-icon">${ITEM_ICON_SVG[key]}</div>
+      <div>
+        <h2 style="margin:0">${def.name}</h2>
+        <span class="preview-tag rarity-${def.rarity}">${RARITY_LABEL[def.rarity]}</span>
+        ${def.consumable ? `<span class="preview-tag">Consumable</span>` : ''}
+        ${def.exploration ? `<div class="preview-explore">${def.exploration}</div>` : ''}
+      </div>
+    </div>
+    ${def.passive ? `<div class="preview-passive"><b>Passive</b> — ${def.passive.desc}</div>` : ''}
+    ${cardTiles.length
+      ? `<p class="dim-note" style="margin-bottom:8px;">Adds the following cards to your Battle Deck:</p><div class="preview-cards card-grid">${cardTiles.join('')}</div>`
+      : `<p class="dim-note" style="margin-bottom:18px;">No active cards — passive only.</p>`}
+  `;
+}
+
+/* =========================================================================
+   STARTING EQUIPMENT SCREEN
+   ========================================================================= */
+
+let equipPool = [];
+let equipSelected = [];
+
+function beginEquipmentSelection(){
+  equipPool = buildStartingPool();
+  equipSelected = [];
+  closeItemSheet();
+  renderEquipScreen();
+  document.getElementById('equip-screen').classList.remove('hidden');
+  syncMapInputState();
+}
+
+function renderEquipScreen(){
+  document.getElementById('equip-counter-num').textContent = equipSelected.length;
+  document.getElementById('equip-confirm-btn').disabled = equipSelected.length !== 6;
+  const grid = document.getElementById('equip-icon-grid');
+  grid.innerHTML = '';
+  equipPool.forEach(entry=>{
+    const def = ITEM_DEFS[entry.key];
+    const selected = equipSelected.includes(entry.puid);
+    const btn = document.createElement('button');
+    btn.className = `item-icon rarity-${def.rarity} cat-${def.category}` + (selected ? ' selected' : '');
+    btn.innerHTML = `
+      ${def.passive?'<span class="passive-badge">✦</span>':''}
+      <div class="card-head">${def.name}</div>
+      <div class="card-body">${ITEM_ICON_SVG[entry.key]}</div>
+    `;
+    btn.onclick = ()=> showEquipItemPreview(entry.puid);
+    grid.appendChild(btn);
+  });
+}
+
+function showEquipItemPreview(puid){
+  const entry = equipPool.find(e=>e.puid===puid);
+  if (!entry) return;
+  const selected = equipSelected.includes(puid);
+  const atCap = equipSelected.length>=6;
+  const body = buildPreviewBodyHtml(entry.key) + `
+    <div class="btn-row">
+      ${selected
+        ? `<button class="ghost-btn" id="preview-toggle">Remove from loadout</button>`
+        : `<button class="primary-btn" id="preview-toggle" ${atCap?'disabled':''}>${atCap?'Loadout full (6/6)':'Take item'}</button>`}
+      <button class="ghost-btn" id="preview-close">Close</button>
+    </div>
+  `;
+  openItemSheet(body);
+  document.getElementById('preview-close').onclick = closeItemSheet;
+  if (selected){
+    document.getElementById('preview-toggle').onclick = ()=>{
+      equipSelected = equipSelected.filter(p=>p!==puid);
+      renderEquipScreen();
+      closeItemSheet();
+    };
+  } else if (!atCap){
+    document.getElementById('preview-toggle').onclick = ()=>{
+      equipSelected.push(puid);
+      renderEquipScreen();
+      closeItemSheet();
+    };
+  }
+}
+
+function confirmEquipmentSelection(){
+  const chosenKeys = equipSelected.map(puid => equipPool.find(e=>e.puid===puid).key);
+  closeItemSheet();
+  document.getElementById('equip-screen').classList.add('hidden');
+  run = newExpeditionState(chosenKeys);
+  openInventoryScreen('loadout');
+}
+
+/* =========================================================================
+   INVENTORY & BATTLE DECK SCREEN
+   ========================================================================= */
+
+function openInventoryScreen(mode){
+  invScreenMode = mode;
+  document.getElementById('inv-screen-title').textContent = mode==='loadout' ? 'Prepare Expedition' : 'Inventory';
+  document.getElementById('inv-close-btn').style.display = mode==='drawer' ? '' : 'none';
+  document.getElementById('inv-enter-btn').style.display = mode==='loadout' ? '' : 'none';
+  renderInventoryScreen();
+  document.getElementById('inv-screen').classList.remove('hidden');
+  syncMapInputState();
+}
+function closeInventoryScreen(){
+  closeItemSheet();
+  document.getElementById('inv-screen').classList.add('hidden');
+  syncMapInputState();
+}
+
+function renderInventoryScreen(){
+  if (!run) return;
+  document.getElementById('deck-counter-num').textContent = run.battleDeck.length;
+  document.getElementById('inv-count-label').textContent = `${run.inventory.length}/10 Items`;
+  document.getElementById('deck-count-label').textContent = `${countDeckCards()} Cards`;
+  renderItemIconGrid();
+  renderDeckCardGrid();
+}
+
+function renderItemIconGrid(){
+  const grid = document.getElementById('item-icon-grid');
+  grid.innerHTML = '';
+  run.inventory.forEach(item=>{
+    const def = ITEM_DEFS[item.key];
+    const inDeck = run.battleDeck.includes(item.uid);
+    const btn = document.createElement('button');
+    btn.className = `item-icon rarity-${def.rarity} cat-${def.category}` + (inDeck ? ' in-deck' : '');
+    btn.innerHTML = `
+      ${def.passive?'<span class="passive-badge">✦</span>':''}
+      ${inDeck?'<span class="deck-dot"></span>':''}
+      <div class="card-head">${def.name}</div>
+      <div class="card-body">${ITEM_ICON_SVG[item.key]}</div>
+    `;
+    btn.onclick = ()=> showItemPreview(item.uid);
+    grid.appendChild(btn);
+  });
+}
+
+function renderDeckCardGrid(){
+  const grid = document.getElementById('deck-card-grid');
+  const passiveBox = document.getElementById('deck-passive-list');
+  grid.innerHTML = '';
+  passiveBox.innerHTML = '';
+  const items = run.battleDeck.map(uid=>run.inventory.find(it=>it.uid===uid)).filter(Boolean);
+
+  const withPassive = items.filter(it=>ITEM_DEFS[it.key].passive);
+  if (withPassive.length){
+    passiveBox.innerHTML = '<div class="passive-summary-title">Active passives</div>' +
+      withPassive.map(it=>`<div class="passive-summary-line"><b>${ITEM_DEFS[it.key].name}</b> — ${ITEM_DEFS[it.key].passive.desc}</div>`).join('');
+  }
+
+  if (!items.length){
+    grid.innerHTML = '<p class="dim-note">Nothing in your Battle Deck yet — tap an item above and add it.</p>';
+    return;
+  }
+  const tiles = [];
+  items.forEach(item=>{
+    ITEM_DEFS[item.key].cards.forEach(([cardId,count])=>{
+      for (let i=0;i<count;i++) tiles.push(cardTileHtml(cardId));
+    });
+  });
+  grid.innerHTML = tiles.length ? tiles.join('') : '<p class="dim-note">These items are passive-only — no active cards to draw.</p>';
+}
+
+function showItemPreview(uid){
+  const item = run.inventory.find(it=>it.uid===uid);
+  if (!item) return;
+  const inDeck = run.battleDeck.includes(uid);
+  const deckFull = run.battleDeck.length>=6;
+  const body = buildPreviewBodyHtml(item.key) + `
+    <div class="btn-row">
+      ${inDeck
+        ? `<button class="ghost-btn" id="preview-toggle">Remove from Battle Deck</button>`
+        : `<button class="primary-btn" id="preview-toggle" ${deckFull?'disabled':''}>${deckFull?'Battle Deck full (6/6)':'Add to Battle Deck'}</button>`
+      }
+      <button class="ghost-btn" id="preview-close">Close</button>
+    </div>
+  `;
+  openItemSheet(body);
+  document.getElementById('preview-close').onclick = closeItemSheet;
+  if (inDeck){
+    document.getElementById('preview-toggle').onclick = ()=>{
+      run.battleDeck = run.battleDeck.filter(u=>u!==uid);
+      renderInventoryScreen();
+      closeItemSheet();
+    };
+  } else if (!deckFull){
+    document.getElementById('preview-toggle').onclick = ()=>{
+      run.battleDeck.push(uid);
+      renderInventoryScreen();
+      closeItemSheet();
+    };
+  }
+}
+
+/* =========================================================================
+   DARKNESS
+   ========================================================================= */
+
+function updateDarknessState(){
+  if (run.ichor<=0 && !run.darkness){
+    run.darkness = true;
+    run.darknessMovesLeft = 3;
+    log('The cart sputters out. Darkness closes in.');
+  } else if (run.ichor>0 && run.darkness){
+    run.darkness = false;
+    log('Light returns.');
+  }
+}
+
+/* =========================================================================
+   MOVEMENT
+   ========================================================================= */
+
+function canMoveTo(nodeId){
+  if (!run.currentNodeId) return false;
+  return run.nodes[run.currentNodeId].connections.includes(nodeId);
+}
+
+function moveTo(nodeId){
+  if (run.over) return;
+  if (!canMoveTo(nodeId)) return;
+  const node = run.nodes[nodeId];
+
+  if (run.darkness){
+    run.darknessMovesLeft -= 1;
+    if (run.darknessMovesLeft <= 0){
+      run.currentNodeId = nodeId;
+      renderHud();
+      mapScene.refresh();
+      endExpedition('darkness');
+      return;
+    }
+  } else {
+    run.ichor = Math.max(0, run.ichor - 1);
+    updateDarknessState();
+  }
+
+  run.currentNodeId = nodeId;
+  if (!node.everVisited){
+    node.everVisited = true;
+    run.nodesExploredCount++;
+    if (node.depth > run.maxDepthReached) run.maxDepthReached = node.depth;
+  }
+  node.revealed = true;
+  node.connections.forEach(id=>{ run.nodes[id].revealed = true; });
+
+  renderHud();
+  mapScene.refresh();
+  resolveNode(node);
+}
+
+function resolveNode(node){
+  if (node.cleared || node.type==='start'){
+    if (node.type!=='start') log('Nothing here now.');
+    return;
+  }
+  if (node.type==='combat'){
+    const def = ENEMY_DEFS[Math.floor(Math.random()*ENEMY_DEFS.length)];
+    startCombat(def, node, false);
+  } else if (node.type==='elite'){
+    const def = ELITE_DEFS[Math.floor(Math.random()*ELITE_DEFS.length)];
+    startCombat(def, node, true);
+  } else if (node.type==='ichor'){
+    run.ichorNodesDiscoveredCount++;
+    showIchorNodeModal(node);
+  } else if (node.type==='event'){
+    const ev = EVENTS[Math.floor(Math.random()*EVENTS.length)];
+    showEventModal(ev, node);
+  } else if (node.type==='discovery'){
+    const dv = DISCOVERIES[Math.floor(Math.random()*DISCOVERIES.length)];
+    showDiscoveryModal(dv, node);
+  }
+}
+
+/* =========================================================================
+   ICHOR NODE MODAL
+   ========================================================================= */
+
+function showIchorNodeModal(node){
+  const alreadyUsed = save.usedIchorDepths.includes(node.depth);
+  const panel = document.getElementById('panel-generic');
+  panel.innerHTML = `
+    <h2>Ichor Vein</h2>
+    <p class="flavor">Thick black liquid seeps slowly from a crack in the stone. You can draw it into the cart, or try to refine it into something purer.</p>
+    <div class="choice-list">
+      <button class="choice-btn" id="ichor-refuel">Refuel — draw +6 Ichor now
+        <small>${run.ichor} → ${Math.min(run.maxIchor, run.ichor+6)} / ${run.maxIchor}</small>
+      </button>
+      <button class="choice-btn" id="ichor-refine" ${alreadyUsed?'disabled':''}>
+        ${alreadyUsed ? 'Refine — already claimed at this depth' : `Refine — permanently raise max Ichor by 2`}
+        ${!alreadyUsed?`<small>${run.maxIchor} → ${run.maxIchor+2} max, forever</small>`:''}
+      </button>
+      <button class="choice-btn" id="ichor-skip">Leave it</button>
+    </div>
+  `;
+  showScrim('scrim-generic');
+  document.getElementById('ichor-refuel').onclick = ()=>{
+    flushLogBuffer();
+    addIchor(6); node.cleared = true;
+    log('The cart drinks deep. Ichor refilled.');
+    showOutcomeModal('Ichor Vein', flushLogBuffer());
+  };
+  if (!alreadyUsed){
+    document.getElementById('ichor-refine').onclick = ()=>{
+      flushLogBuffer();
+      save.maxIchor += 2; run.maxIchor += 2; save.usedIchorDepths.push(node.depth);
+      persistSave(); node.cleared = true; renderHud();
+      log(`Max Ichor increased to ${run.maxIchor}, permanently.`);
+      log('Something in this Ichor will never be this pure again.');
+      showOutcomeModal('Ichor Vein', flushLogBuffer());
+    };
+  }
+  document.getElementById('ichor-skip').onclick = ()=> hideScrim('scrim-generic');
+}
+
+/* =========================================================================
+   EVENT / DISCOVERY MODALS
+   ========================================================================= */
+
+function showEventModal(ev, node){
+  const panel = document.getElementById('panel-generic');
+  panel.innerHTML = `<h2>${ev.title}</h2><p class="flavor">${ev.flavor}</p><div class="choice-list" id="event-choices"></div>`;
+  const list = document.getElementById('event-choices');
+  ev.choices.forEach(choice=>{
+    const enabled = !choice.requires || choice.requires();
+    const btn = document.createElement('button');
+    btn.className = 'choice-btn';
+    btn.disabled = !enabled;
+    btn.innerHTML = `${choice.label}${choice.sub?`<small>${choice.sub}</small>`:''}`;
+    btn.onclick = ()=>{
+      flushLogBuffer(); flushGrantedItems();
+      choice.run(node);
+      node.cleared = true;
+      renderHud();
+      showOutcomeModal(ev.title, flushLogBuffer(), flushGrantedItems());
+    };
+    list.appendChild(btn);
+  });
+  showScrim('scrim-generic');
+}
+
+function showDiscoveryModal(dv, node){
+  const panel = document.getElementById('panel-generic');
+  const hint = dv.special && hasItem(dv.special.needsItem) ? `<p class="flavor" style="color:var(--teal)">${dv.special.bonusText}</p>` : '';
+  panel.innerHTML = `
+    <h2>${dv.title}</h2>
+    <p class="flavor">${dv.flavor}</p>
+    ${hint}
+    <div class="choice-list"><button class="choice-btn" id="disc-take">Investigate</button></div>
+  `;
+  showScrim('scrim-generic');
+  document.getElementById('disc-take').onclick = ()=>{
+    flushLogBuffer(); flushGrantedItems();
+    dv.run(node);
+    node.cleared = true;
+    renderHud();
+    showOutcomeModal(dv.title, flushLogBuffer(), flushGrantedItems());
+  };
+}
+
+/* =========================================================================
+   DISCARD-ON-FULL-INVENTORY MODAL
+   ========================================================================= */
+
+function showDiscardChoice(newKey){
+  const panel = document.getElementById('panel-discard');
+  panel.innerHTML = `
+    <h2>Pack is full</h2>
+    <p class="flavor">You found <b>${ITEM_DEFS[newKey].name}</b>, but your 10 slots are all in use. Drop something to make room, or leave the new item behind.</p>
+    <div class="choice-list" id="discard-choices"></div>
+    <div class="btn-row"><button class="ghost-btn" id="discard-leave">Leave it behind</button></div>
+  `;
+  const list = document.getElementById('discard-choices');
+  run.inventory.forEach((item,i)=>{
+    const def = ITEM_DEFS[item.key];
+    const btn = document.createElement('button');
+    btn.className = 'choice-btn';
+    btn.textContent = `Drop ${def.name}`;
+    btn.onclick = ()=>{
+      run.battleDeck = run.battleDeck.filter(uid=>uid!==item.uid);
+      run.inventory.splice(i,1,{ uid:'i'+(run.itemUidSeq++), key:newKey });
+      hideScrim('scrim-discard'); renderHud();
+      toast(`Dropped ${def.name} for ${ITEM_DEFS[newKey].name}.`);
+    };
+    list.appendChild(btn);
+  });
+  document.getElementById('discard-leave').onclick = ()=>{ hideScrim('scrim-discard'); toast(`Left the ${ITEM_DEFS[newKey].name} behind.`); };
+  showScrim('scrim-discard');
+}
+
+/* =========================================================================
+   COMBAT
+   ========================================================================= */
+
+let combat = null;
+
+function getActiveMods(){
+  const mods = [];
+  run.battleDeck.forEach(uid=>{
+    const item = run.inventory.find(it=>it.uid===uid);
+    const def = item && ITEM_DEFS[item.key];
+    if (def && def.passive) def.passive.mods.forEach(m=>mods.push(m));
+  });
+  return mods;
+}
+function bonusFor(cardId, field){
+  if (!combat || !combat.activeMods) return 0;
+  return combat.activeMods.reduce((sum,m)=> sum + (m.card===cardId ? (m[field]||0) : 0), 0);
+}
+function describeCardWithMods(cardId){
+  const def = CARD_DEFS[cardId];
+  const dmgB = bonusFor(cardId,'damage'), blkB = bonusFor(cardId,'block'), burnB = bonusFor(cardId,'burn');
+  if (!dmgB && !blkB && !burnB) return def.desc;
+  const parts = [];
+  if (def.damage!=null) parts.push(`Deal ${def.damage+dmgB} damage.`);
+  if (def.block!=null) parts.push(`Gain ${def.block+blkB} Block.`);
+  if (def.burn!=null) parts.push(`Apply ${def.burn+burnB} Burn.`);
+  if (def.draw) parts.push('Draw a card.');
+  if (def.weaken) parts.push('Enemy deals half damage next attack.');
+  return parts.join(' ');
+}
+
+function startCombat(def, node, isElite){
+  hideNodeTooltip();
+  combat = {
+    node, isElite,
+    enemy: { name:def.name, hp:def.hp, maxHp:def.hp, pattern:def.pattern, turnIndex:0, currentIntent:null, weakenedNextAttack:false, burn:0, block:0 },
+    drawPile:[], hand:[], discardPile:[], energy:0, uidSeq:0,
+    activeMods: [], playerBurn: 0,
+  };
+  combat.activeMods = getActiveMods();
+  const deckCards = [];
+  run.battleDeck.forEach(uid=>{
+    const item = run.inventory.find(it=>it.uid===uid);
+    if (!item) return;
+    ITEM_DEFS[item.key].cards.forEach(([cardId,count])=>{
+      for (let i=0;i<count;i++) deckCards.push(cardId);
+    });
+  });
+  combat.drawPile = shuffle(deckCards);
+  document.getElementById('combat-screen').classList.remove('hidden');
+  syncMapInputState();
+  chooseNextIntent();
+  startPlayerTurn();
+  renderCombat();
+}
+
+function shuffle(arr){
+  const a = arr.slice();
+  for (let i=a.length-1;i>0;i--){ const j = Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; }
+  return a;
+}
+
+// Walks the enemy's pattern: turnIndex 0 is its opening move (pattern.first),
+// every turn after that steps through pattern.cycle in order and wraps
+// back to the start — no randomness, so a pattern always plays out the
+// same way and can be learned/played around.
+function chooseNextIntent(){
+  const enemy = combat.enemy;
+  const pattern = enemy.pattern;
+  enemy.currentIntent = enemy.turnIndex === 0
+    ? pattern.first
+    : pattern.cycle[(enemy.turnIndex - 1) % pattern.cycle.length];
+}
+
+function startPlayerTurn(){
+  combat.energy = 3;
+  drawCards(5);
+  renderCombat();
+}
+
+function drawCards(n){
+  for (let i=0;i<n;i++){
+    if (!combat.drawPile.length){
+      if (!combat.discardPile.length) return;
+      combat.drawPile = shuffle(combat.discardPile);
+      combat.discardPile = [];
+    }
+    const cardId = combat.drawPile.pop();
+    combat.hand.push({ uid: 'c'+(combat.uidSeq++), cardId });
+  }
+}
+
+function playCard(uid){
+  const idx = combat.hand.findIndex(c=>c.uid===uid);
+  if (idx<0) return;
+  const card = combat.hand[idx];
+  const def = CARD_DEFS[card.cardId];
+  if (combat.energy < def.cost) return;
+  combat.energy -= def.cost;
+  combat.hand.splice(idx,1);
+  combat.discardPile.push(card.cardId);
+
+  if (def.damage){
+    // The enemy's own Block (see resolveEnemyActions) absorbs the
+    // player's damage exactly the way the player's Block absorbs the
+    // enemy's attacks below in enemyTurn — same mechanic, mirrored.
+    const totalDmg = def.damage + bonusFor(card.cardId,'damage');
+    const eBlock = combat.enemy.block || 0;
+    const blocked = Math.min(eBlock, totalDmg);
+    combat.enemy.block = eBlock - blocked;
+    combat.enemy.hp = Math.max(0, combat.enemy.hp - (totalDmg - blocked));
+  }
+  if (def.block) combat.playerBlock = (combat.playerBlock||0) + def.block + bonusFor(card.cardId,'block');
+  if (def.burn) combat.enemy.burn = (combat.enemy.burn||0) + def.burn + bonusFor(card.cardId,'burn');
+  if (def.weaken) combat.enemy.weakenedNextAttack = true;
+  if (def.draw) drawCards(def.draw);
+
+  renderCombat();
+  if (combat.enemy.hp<=0){ winCombat(); }
+}
+
+function endPlayerTurn(){
+  combat.discardPile.push(...combat.hand.map(c=>c.cardId));
+  combat.hand = [];
+  // The enemy's Block only ever protects it through one player turn (the
+  // one right after it was gained) — once that turn is over, spent or
+  // not, it's gone. Matches the player's own Block, which clears the
+  // moment the enemy's one attack phase has resolved (see enemyTurn).
+  combat.enemy.block = 0;
+
+  // Burn resolves at the END of the player's own turn — after every card
+  // has been played, including any Block gained just this turn — and
+  // tries to hit that current Block FIRST, only spilling into HP once
+  // Block is exhausted, exactly like an ordinary attack would.
+  if (combat.playerBurn > 0){
+    const blocked = Math.min(combat.playerBlock||0, combat.playerBurn);
+    combat.playerBlock = Math.max(0, (combat.playerBlock||0) - blocked);
+    run.hp = Math.max(0, run.hp - (combat.playerBurn - blocked));
+    log(`Burn deals ${combat.playerBurn} to you${blocked?` (${blocked} blocked)`:''}.`);
+    combat.playerBurn -= 1;
+    renderHud();
+  }
+
+  renderCombat();
+  if (run.hp<=0){ closeCombatScreen(); endExpedition('death'); return; }
+
+  setTimeout(enemyTurn, 350);
+}
+
+// Executes every action in the enemy's current turn (an array — a turn
+// can combine more than one action, e.g. attack+block) in order. Order
+// doesn't actually matter for correctness: each action type only touches
+// its own piece of state (attack -> player HP via playerBlock, heal ->
+// own HP, block -> own block pool, ignite -> playerBurn), so none of
+// them interact with each other within the same turn.
+function resolveEnemyActions(actions){
+  const enemy = combat.enemy;
+  actions.forEach(action=>{
+    if (action.type === 'attack'){
+      let dmg = action.value;
+      if (enemy.weakenedNextAttack){ dmg = Math.floor(dmg/2); enemy.weakenedNextAttack = false; }
+      const block = combat.playerBlock||0;
+      const blocked = Math.min(block, dmg);
+      const taken = dmg - blocked;
+      combat.playerBlock = Math.max(0, block - blocked);
+      run.hp = Math.max(0, run.hp - taken);
+      log(`${enemy.name} attacks for ${dmg}${blocked?` (${blocked} blocked)`:''}.`);
+    } else if (action.type === 'heal'){
+      enemy.hp = Math.min(enemy.maxHp, enemy.hp + action.value);
+      log(`${enemy.name} heals for ${action.value}.`);
+    } else if (action.type === 'block'){
+      enemy.block = (enemy.block||0) + action.value;
+      log(`${enemy.name} braces, gaining ${action.value} Block.`);
+    } else if (action.type === 'ignite'){
+      combat.playerBurn = (combat.playerBurn||0) + action.value;
+      log(`${enemy.name} sears you, applying ${action.value} Burn.`);
+    }
+  });
+}
+
+function enemyTurn(){
+  const enemy = combat.enemy;
+
+  resolveEnemyActions(enemy.currentIntent);
+  combat.playerBlock = 0;
+  renderHud();
+  renderCombat();
+
+  if (run.hp<=0){ closeCombatScreen(); endExpedition('death'); return; }
+
+  // Burn resolves at the END of the enemy's own turn — after all of its
+  // actions, including any Block it just gained this very turn — and
+  // tries to hit that current Block FIRST, only spilling into HP once
+  // Block is exhausted. Mirrors the player's burn handling in
+  // endPlayerTurn exactly, just for the enemy's turn instead.
+  if (enemy.burn > 0){
+    const blocked = Math.min(enemy.block||0, enemy.burn);
+    enemy.block = (enemy.block||0) - blocked;
+    enemy.hp = Math.max(0, enemy.hp - (enemy.burn - blocked));
+    log(`Burn deals ${enemy.burn} to ${enemy.name}${blocked?` (${blocked} blocked)`:''}.`);
+    enemy.burn -= 1;
+    renderCombat();
+  }
+  if (enemy.hp<=0){ setTimeout(winCombat, 300); return; }
+
+  enemy.turnIndex += 1;
+  chooseNextIntent();
+  setTimeout(()=>{ startPlayerTurn(); }, 350);
+}
+
+function winCombat(){
+  const node = combat.node;
+  const wasElite = combat.isElite;
+  closeCombatScreen();
+  node.cleared = true;
+  flushLogBuffer(); flushGrantedItems();
+  const it = grantRandomItem(node.depth);
+  log(`Victory. You take: ${ITEM_DEFS[it].name}.`);
+  if (wasElite){ const it2=grantRandomItem(node.depth); log(`The elite carried more: also ${ITEM_DEFS[it2].name}.`); }
+  renderHud();
+  showOutcomeModal(wasElite ? 'Elite Defeated' : 'Enemy Defeated', flushLogBuffer(), flushGrantedItems());
+}
+
+function closeCombatScreen(){
+  document.getElementById('combat-screen').classList.add('hidden');
+  combat = null;
+  syncMapInputState();
+}
+
+function renderCombat(){
+  if (!combat) return;
+  const e = combat.enemy;
+  document.getElementById('enemy-name').textContent = e.name;
+  document.getElementById('enemy-hp-fill').style.width = `${Math.max(0,e.hp/e.maxHp*100)}%`;
+  document.getElementById('enemy-hp-text').textContent = `${e.hp} / ${e.maxHp}`;
+  document.getElementById('enemy-burn-tag').textContent = e.burn>0 ? `Burning: ${e.burn}` : '';
+  document.getElementById('enemy-block-tag').textContent = e.block>0 ? `Block: ${e.block}` : '';
+
+  // The enemy's turn can combine more than one action (e.g. attack+block),
+  // so the telegraphed intent shows every action in that turn, joined —
+  // not just a single type/value pair like before. Each value is colored
+  // by its OWN action type (not the turn as a whole), since a mixed turn
+  // like heal+ignite has no single "kind" to color the whole line by.
+  const intentEl = document.getElementById('enemy-intent');
+  intentEl.className = '';
+  if (run.darkness){
+    intentEl.innerHTML = `Intent hidden — no light to see it.`;
+  } else if (e.currentIntent){
+    const labels = { attack:'Attack', heal:'Heal', block:'Block', ignite:'Ignite' };
+    const valClass = { attack:'val', heal:'val val-heal', block:'val val-block', ignite:'val val-ignite' };
+    intentEl.innerHTML = e.currentIntent
+      .map(a=>`${labels[a.type]} — <span class="${valClass[a.type]}">${a.value}</span>`)
+      .join('<span class="intent-plus"> + </span>');
+  }
+
+  document.getElementById('c-hp').textContent = run.hp;
+  document.getElementById('c-block').textContent = combat.playerBlock||0;
+  document.getElementById('c-burn').textContent = combat.playerBurn||0;
+  document.getElementById('draw-count').textContent = combat.drawPile.length;
+  document.getElementById('discard-count').textContent = combat.discardPile.length;
+
+  const pips = document.getElementById('energy-pips');
+  pips.innerHTML = '';
+  for (let i=0;i<3;i++){
+    const p = document.createElement('div');
+    p.className = 'pip' + (i<combat.energy?' filled':'');
+    pips.appendChild(p);
+  }
+
+  const hand = document.getElementById('hand-zone');
+  hand.innerHTML = '';
+  combat.hand.forEach(card=>{
+    const def = CARD_DEFS[card.cardId];
+    const el = document.createElement('div');
+    const affordable = combat.energy >= def.cost;
+    el.className = `card type-${def.type}` + (affordable ? '' : ' disabled');
+    el.innerHTML = `
+      <div class="card-top"><span class="card-name">${def.name}</span><span class="cost">${def.cost}</span></div>
+      <div class="card-art">${CARD_ICON_SVG[card.cardId]}</div>
+      <div class="card-desc">${describeCardWithMods(card.cardId)}</div>
+    `;
+    el.onclick = ()=>{ if (affordable) playCard(card.uid); };
+    hand.appendChild(el);
+  });
+}
+
+/* =========================================================================
+   RESULTS / DEATH
+   ========================================================================= */
+
+function endExpedition(reason){
+  run.over = true;
+  const panel = document.getElementById('panel-results');
+  const title = reason==='death' ? 'Expedition Lost' : 'Swallowed by the Dark';
+  panel.innerHTML = `
+    <h2>${title}</h2>
+    <div class="stat-line"><span>Max depth reached</span><b>${run.maxDepthReached}</b></div>
+    <div class="stat-line"><span>Nodes explored</span><b>${run.nodesExploredCount}</b></div>
+    <div class="stat-line"><span>Ichor Nodes discovered</span><b>${run.ichorNodesDiscoveredCount}</b></div>
+    <div class="stat-line"><span>Max Ichor capacity</span><b>${save.maxIchor}</b></div>
+    <div class="btn-row"><button class="primary-btn" id="new-expedition-btn">New Expedition</button></div>
+  `;
+  showScrim('scrim-results');
+  document.getElementById('new-expedition-btn').onclick = ()=>{
+    hideScrim('scrim-results');
+    beginEquipmentSelection();
+  };
+}
+
+function enterDungeon(){
+  run.nodes = generateMap();
+  const start = Object.values(run.nodes).find(n=>n.type==='start');
+  start.revealed = true; start.everVisited = true; start.cleared = true;
+  start.connections.forEach(id=>{ run.nodes[id].revealed = true; });
+  run.currentNodeId = start.id;
+  run.nodesExploredCount = 1;
+  renderHud();
+  mapScene.loadRun();
+}
+
+/* =========================================================================
+   PHASER MAP SCENE
+
+   Node visuals:
+   - the CURRENT node is a filled, glowing amber square regardless of type
+   - a VISITED node (you've been there before) is a filled square in its
+     type color
+   - a REVEALED-but-not-yet-visited node is a hollow square (outline only,
+     in its type color) — you know it's there and what it is, you just
+     haven't gone yet
+   Corridor visuals:
+   - a SOLID line connects two nodes you've both visited (a travelled path)
+   - a DASHED line leads to a node you can see but haven't visited
+   - a fading dashed line is a stub hinting that a node's connections
+     continue further into fog you haven't revealed at all yet
+   ========================================================================= */
+
+const TYPE_COLOR = { start:0x8b9098, combat:0xc1443c, elite:0x8b1f1f, event:0x4a8b9c, discovery:0xe8a33d, ichor:0xe8a33d };
+const TYPE_GLYPH = { start:'\u2302', combat:'\u2694', elite:'\u2620', event:'?', discovery:'\u2726' };
+const TYPE_LABEL = { start:'Starting Camp', combat:'Combat', elite:'Elite', event:'Event', discovery:'Discovery', ichor:'Ichor Vein' };
+
+function hexToCss(n){ return '#' + n.toString(16).padStart(6,'0'); }
+
+function pointerToClient(pointer){
+  // Prefer the real DOM event's coordinates; fall back to converting the
+  // Phaser pointer's canvas-space position via the canvas's own bounding
+  // rect, so a missing pointer.event can't throw and silently skip a
+  // frame's rendering.
+  if (pointer.event && typeof pointer.event.clientX === 'number'){
+    return { x: pointer.event.clientX, y: pointer.event.clientY };
+  }
+  const canvas = game.canvas;
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = rect.width / game.scale.width;
+  const scaleY = rect.height / game.scale.height;
+  return { x: rect.left + pointer.x*scaleX, y: rect.top + pointer.y*scaleY };
+}
+function showNodeTooltip(node, clientX, clientY){
+  const el = document.getElementById('node-tooltip');
+  const label = TYPE_LABEL[node.type] || 'Unknown';
+  el.textContent = (node.cleared && node.type!=='start') ? `${label} — cleared` : label;
+  el.style.left = clientX + 'px';
+  el.style.top = clientY + 'px';
+  el.classList.add('show');
+}
+function hideNodeTooltip(){
+  document.getElementById('node-tooltip').classList.remove('show');
+}
+
+// Draw a polyline either solid or as dashes, optionally fading the dashes
+// to transparent along their length (used for the "continues into fog" stub).
+function drawPolyline(g, pts, color, alpha, dashed, fadeOut){
+  if (!dashed){
+    g.lineStyle(2, color, alpha);
+    g.beginPath();
+    g.moveTo(pts[0].x, pts[0].y);
+    for (let i=1;i<pts.length;i++) g.lineTo(pts[i].x, pts[i].y);
+    g.strokePath();
+    return;
+  }
+  const segLens = [];
+  let total = 0;
+  for (let i=1;i<pts.length;i++){
+    const dx=pts[i].x-pts[i-1].x, dy=pts[i].y-pts[i-1].y;
+    const l = Math.sqrt(dx*dx+dy*dy);
+    segLens.push(l); total += l;
+  }
+  if (total===0) return;
+  function pointAt(distAlong){
+    let remaining = distAlong;
+    for (let i=0;i<segLens.length;i++){
+      if (remaining <= segLens[i] || i===segLens.length-1){
+        const t = segLens[i]>0 ? remaining/segLens[i] : 0;
+        return { x: pts[i].x + (pts[i+1].x-pts[i].x)*t, y: pts[i].y + (pts[i+1].y-pts[i].y)*t };
+      }
+      remaining -= segLens[i];
+    }
+    return pts[pts.length-1];
+  }
+  const dash = 7, gap = 6;
+  let pos = 0;
+  while (pos < total){
+    const endPos = Math.min(pos+dash, total);
+    const t = pos/total;
+    const a = fadeOut ? alpha * (1-t) : alpha;
+    if (a > 0.02){
+      const p1 = pointAt(pos), p2 = pointAt(endPos);
+      g.lineStyle(2, color, a);
+      g.lineBetween(p1.x, p1.y, p2.x, p2.y);
+    }
+    pos += dash+gap;
+  }
+}
+
+class MapScene extends Phaser.Scene {
+  constructor(){ super('MapScene'); }
+  create(){
+    this.graphics = this.add.graphics();
+    this.nodeLayer = this.add.container(0,0);
+    this.cameras.main.setBackgroundColor('#0b0d10');
+    mapScene = this;
+
+    // The point the camera is currently centered on / animating toward.
+    // Tweening this plain point (and re-centering every frame via
+    // centerOn) rather than tweening scrollX/scrollY directly means the
+    // camera math is recomputed fresh each frame from whatever the
+    // camera's TRUE current width/height/zoom actually are — it can't
+    // drift out of sync if a layout reflow changes the canvas size
+    // mid-animation.
+    this.panPoint = { x: 0, y: 0 };
+
+    // manual drag-to-pan; a short tap still counts as a tap
+    this.isPointerDown = false;
+    this.dragged = false;
+    this.input.on('pointerdown', pointer=>{
+      this.isPointerDown = true;
+      this.dragged = false;
+      this.dragStartX = pointer.x; this.dragStartY = pointer.y;
+      this.camStartX = this.cameras.main.scrollX; this.camStartY = this.cameras.main.scrollY;
+      this.tweens.killTweensOf(this.panPoint);
+    });
+    this.input.on('pointermove', pointer=>{
+      if (!this.isPointerDown) return;
+      const dx = pointer.x - this.dragStartX, dy = pointer.y - this.dragStartY;
+      if (Math.abs(dx) > 6 || Math.abs(dy) > 6) this.dragged = true;
+      if (this.dragged){
+        this.cameras.main.scrollX = this.camStartX - dx;
+        this.cameras.main.scrollY = this.camStartY - dy;
+        hideNodeTooltip();
+      }
+    });
+    this.input.on('pointerup', ()=>{ this.isPointerDown = false; });
+    this.input.on('pointerupoutside', ()=>{ this.isPointerDown = false; });
+
+    // Self-heal after any layout/canvas-size change (font load reflow,
+    // orientation change, browser chrome show/hide) by re-centering on
+    // whatever node is current, instead of leaving the camera wherever
+    // it happened to be relative to a now-stale size.
+    this.scale.on('resize', ()=>{
+      if (run && run.currentNodeId){
+        const c = run.nodes[run.currentNodeId];
+        this.panPoint.x = c.x; this.panPoint.y = c.y;
+        this.cameras.main.centerOn(c.x, c.y);
+      }
+    });
+
+    syncMapInputState(); // reflects whatever overlay (e.g. the start screen) is already showing
+    if (run && run.currentNodeId) this.loadRun();
+  }
+  loadRun(){
+    const xs = Object.values(run.nodes).map(n=>n.x);
+    const ys = Object.values(run.nodes).map(n=>n.y);
+    // Must be at least half the camera's width/height, or centering on a
+    // node near the edge of the generated map gets clipped by the bounds
+    // before it can fully center — cutting that node off-screen.
+    const pad = 500;
+    this.cameras.main.setBounds(Math.min(...xs)-pad, Math.min(...ys)-pad, (Math.max(...xs)-Math.min(...xs))+pad*2, (Math.max(...ys)-Math.min(...ys))+pad*2);
+    const current = run.nodes[run.currentNodeId];
+    // Position the camera INSTANTLY and FIRST, before drawing anything —
+    // nothing is animating yet, so there's nothing to race against this.
+    this.tweens.killTweensOf(this.panPoint);
+    this.panPoint.x = current.x; this.panPoint.y = current.y;
+    this.cameras.main.centerOn(current.x, current.y);
+    this.redraw();
+  }
+  refresh(){
+    // Called after the player moves to a new node: redraw first, then
+    // animate the camera there. loadRun() (first entry into a dungeon)
+    // uses redraw() directly instead, with no animation involved.
+    this.redraw();
+    this.panToCurrent();
+  }
+  redraw(){
+    if (!run || !run.currentNodeId) return;
+    try {
+      this._redraw();
+    } catch(e){
+      console.error('Map redraw failed:', e);
+      toast('Map render error — see console for details.');
+    }
+  }
+  _redraw(){
+    hideNodeTooltip();
+    this.graphics.clear();
+    this.nodeLayer.removeAll(true);
+
+    const current = run.nodes[run.currentNodeId];
+    const visibleIds = new Set([current.id, ...current.connections]);
+    Object.values(run.nodes).forEach(n=>{ if (n.revealed) visibleIds.add(n.id); });
+
+    // corridors
+    visibleIds.forEach(id=>{
+      const n = run.nodes[id];
+      n.connections.forEach(otherId=>{
+        if (!visibleIds.has(otherId)) return;
+        const o = run.nodes[otherId];
+        if (id < otherId){
+          const bothVisited = !!n.everVisited && !!o.everVisited;
+          const touchesCurrent = n.id===current.id || o.id===current.id;
+          const alpha = bothVisited ? 0.85 : (touchesCurrent ? 0.7 : 0.5);
+          // every connection now spans exactly one grid step (the map
+          // generator only ever links Moore-neighbors), so a straight
+          // line is always correct — no more same-row overlap to arc around
+          const pts = [{x:n.x,y:n.y},{x:o.x,y:o.y}];
+          drawPolyline(this.graphics, pts, 0x3a4048, alpha, !bothVisited, false);
+        }
+      });
+      // fading dashed stub(s) toward any connections still hidden in fog —
+      // pointed in their real direction (not just always straight down)
+      // and reaching noticeably further out, so they're easy to spot
+      n.connections.forEach(cid=>{
+        if (visibleIds.has(cid)) return;
+        const hidden = run.nodes[cid];
+        const dx = hidden.x - n.x, dy = hidden.y - n.y;
+        const dist = Math.sqrt(dx*dx + dy*dy) || 1;
+        const stubLen = Math.min(dist * 0.65, 120);
+        const ex = n.x + (dx/dist) * stubLen, ey = n.y + (dy/dist) * stubLen;
+        drawPolyline(this.graphics, [{x:n.x,y:n.y},{x:ex,y:ey}], 0x3a4048, 0.6, true, true);
+      });
+    });
+
+    // nodes — rounded squares: filled+amber for current, filled(type
+    // color) for visited, hollow(type-colored outline) for revealed-only
+    visibleIds.forEach(id=>{
+      const n = run.nodes[id];
+      const isCurrent = n.id===current.id;
+      const typeColor = TYPE_COLOR[n.type] || 0x555a60;
+      const size = isCurrent ? 44 : 36;
+
+      if (isCurrent){
+        const sq = this.add.rectangle(n.x, n.y, size, size, 0xe8a33d, 1);
+        sq.setStrokeStyle(3, 0xffffff, 1);
+        this.nodeLayer.add(sq);
+        const glow = this.add.rectangle(n.x, n.y, size+14, size+14, 0x000000, 0);
+        glow.setStrokeStyle(2, 0xe8a33d, 0.55);
+        this.nodeLayer.add(glow);
+      } else if (n.everVisited){
+        const sq = this.add.rectangle(n.x, n.y, size, size, typeColor, n.cleared ? 0.55 : 0.9);
+        sq.setStrokeStyle(1, 0x000000, 0.35);
+        this.nodeLayer.add(sq);
+      } else {
+        const sq = this.add.rectangle(n.x, n.y, size, size, 0x000000, 0);
+        sq.setStrokeStyle(2, typeColor, 0.9);
+        this.nodeLayer.add(sq);
+      }
+
+      const glyphColorCss = isCurrent ? '#0b0d10' : (n.everVisited ? '#ffffff' : hexToCss(typeColor));
+      if (n.type==='ichor'){
+        const filled = isCurrent || n.everVisited;
+        const diamond = this.add.rectangle(n.x, n.y, 12, 12, filled ? (isCurrent?0x0b0d10:0xffffff) : 0x000000, filled?0.9:0).setAngle(45);
+        if (!filled) diamond.setStrokeStyle(2, typeColor, 0.9);
+        this.nodeLayer.add(diamond);
+      } else if (TYPE_GLYPH[n.type]){
+        const t = this.add.text(n.x, n.y, TYPE_GLYPH[n.type], { fontSize:'15px', color: glyphColorCss, fontFamily:'Inter, sans-serif' }).setOrigin(0.5);
+        this.nodeLayer.add(t);
+      }
+
+      if (!isCurrent && this.canReach(n.id)){
+        const ring = this.add.rectangle(n.x, n.y, size+10, size+10, 0x000000, 0);
+        ring.setStrokeStyle(2, 0xe8a33d, 0.9);
+        this.nodeLayer.add(ring);
+      }
+
+      const hit = this.add.rectangle(n.x, n.y, size+16, size+16, 0x000000, 0.001);
+      hit.setInteractive({ useHandCursor: this.canReach(n.id) });
+      hit.on('pointerup', (pointer)=>{ if (!this.dragged && !isAnyOverlayOpen() && this.canReach(n.id)) moveTo(n.id); });
+      hit.on('pointerover', (pointer)=>{ const c=pointerToClient(pointer); showNodeTooltip(n, c.x, c.y); });
+      hit.on('pointermove', (pointer)=>{ if (!this.dragged){ const c=pointerToClient(pointer); showNodeTooltip(n, c.x, c.y); } });
+      hit.on('pointerout', ()=>{ hideNodeTooltip(); });
+      this.nodeLayer.add(hit);
+    });
+  }
+  panToCurrent(){
+    const current = run.nodes[run.currentNodeId];
+    this.tweens.killTweensOf(this.panPoint);
+    this.tweens.add({
+      targets: this.panPoint,
+      x: current.x,
+      y: current.y,
+      duration: 400,
+      ease: 'Sine.easeInOut',
+      onUpdate: () => {
+        try { this.cameras.main.centerOn(this.panPoint.x, this.panPoint.y); }
+        catch(e){ console.error('Camera centerOn failed:', e); }
+      },
+    });
+  }
+  canReach(id){ return run && run.currentNodeId && run.nodes[run.currentNodeId].connections.includes(id) && !run.over; }
+}
+
+/* =========================================================================
+   SCRIM / MODAL HELPERS
+   ========================================================================= */
+
+function showScrim(id){ hideNodeTooltip(); document.getElementById(id).classList.remove('hidden'); syncMapInputState(); }
+function hideScrim(id){ document.getElementById(id).classList.add('hidden'); syncMapInputState(); }
+
+// Phaser's input manager tracks the pointer globally (it has to, to
+// reliably end a drag that finishes outside the canvas), so a click on
+// an HTML element floating on top of the canvas — an inventory card, a
+// modal button — was still reaching the map underneath and moving the
+// player. Disabling the scene's whole input plugin while any full-screen
+// overlay is open blocks that at the source, not just visually.
+function isAnyOverlayOpen(){
+  const fullScreens = ['inv-screen','equip-screen','combat-screen','dev-screen'];
+  if (fullScreens.some(id=>{ const el=document.getElementById(id); return el && !el.classList.contains('hidden'); })) return true;
+  const scrims = ['scrim-start','scrim-generic','scrim-results','scrim-discard'];
+  if (scrims.some(id=>{ const el=document.getElementById(id); return el && !el.classList.contains('hidden'); })) return true;
+  return false;
+}
+function syncMapInputState(){
+  if (!mapScene) return;
+  const shouldEnable = !isAnyOverlayOpen();
+  if (mapScene.input) mapScene.input.enabled = shouldEnable;
+  if (!shouldEnable){
+    // An overlay is taking over the screen, quite possibly in the middle
+    // of processing the very pointer event that triggered it (e.g. a tap
+    // on a node that starts combat) — which can leave the scene's own
+    // "pointer is currently down" bookkeeping stuck at true, since the
+    // listener that would have cleared it never got to run. Clear it
+    // proactively here so the next real interaction, once the map is
+    // interactive again, starts clean instead of misreading itself as
+    // still mid-drag and panning on its own.
+    mapScene.isPointerDown = false;
+    mapScene.dragged = false;
+  }
+}
+
+/* =========================================================================
+   START SCREEN
+   ========================================================================= */
+
+function renderStartScreen(){
+  const panel = document.getElementById('panel-start');
+  panel.innerHTML = `
+    <h2>Project Ichor</h2>
+    <p class="flavor">Go deeper than the last expedition. Manage what you carry. Push your luck before the darkness catches you.</p>
+    <div class="stat-line"><span>Current max Ichor capacity</span><b>${save.maxIchor}</b></div>
+    <div class="btn-row">
+      <button class="primary-btn" id="start-go">Begin Expedition</button>
+    </div>
+  `;
+  document.getElementById('start-go').onclick = ()=>{ hideScrim('scrim-start'); beginEquipmentSelection(); };
+}
+
+/* =========================================================================
+   DEVELOPER MENU
+
+   Testing/debugging tools only — not meant for a real player in a shipped
+   build, hence living where the old "?" help button used to be. Every
+   control here either mutates `run` (or `save`) directly and re-renders,
+   or is a thin wrapper around an existing game function (grantRandomItem,
+   winCombat, etc.) so it can't drift out of sync with normal gameplay
+   logic. Anything that needs an active expedition is tagged with the
+   .dev-needs-run class and simply disabled when `run` is null (see
+   renderDevMenu) rather than being hidden — keeps the panel's layout
+   stable whether or not a run is in progress.
+   ========================================================================= */
+
+function openDevMenu(){
+  renderDevMenu();
+  document.getElementById('dev-screen').classList.remove('hidden');
+  syncMapInputState();
+}
+function closeDevMenu(){
+  document.getElementById('dev-screen').classList.add('hidden');
+  syncMapInputState();
+}
+
+function renderDevMenu(){
+  const active = !!run;
+
+  // Resources: pre-fill inputs with current values so "Set" without
+  // touching the field is a harmless no-op, not a reset to 0/blank.
+  document.getElementById('dev-hp-input').value = active ? run.hp : '';
+  document.getElementById('dev-ichor-input').value = active ? run.ichor : '';
+  document.getElementById('dev-maxichor-input').value = active ? run.maxIchor : save.maxIchor;
+  document.getElementById('dev-depth-input').value = active && run.currentNodeId
+    ? run.nodes[run.currentNodeId].depth : 1;
+
+  document.getElementById('dev-no-run-note').style.display = active ? 'none' : '';
+  document.querySelectorAll('.dev-needs-run').forEach(el=>{ el.disabled = !active; });
+  // "Win current combat" only makes sense mid-fight, even with a run active
+  document.getElementById('dev-win-combat').disabled = !combat;
+
+  // Item dropdown: built once (every ITEM_DEFS key, labelled with its
+  // rarity so you can pick a specific one to test) and left in place —
+  // no need to rebuild it every time the menu opens.
+  const sel = document.getElementById('dev-item-select');
+  if (!sel.dataset.built){
+    Object.keys(ITEM_DEFS).forEach(key=>{
+      const def = ITEM_DEFS[key];
+      const opt = document.createElement('option');
+      opt.value = key;
+      opt.textContent = `${def.name} (${RARITY_LABEL[def.rarity]})`;
+      sel.appendChild(opt);
+    });
+    sel.dataset.built = '1';
+  }
+
+  renderDevInventoryList();
+}
+
+function renderDevInventoryList(){
+  const box = document.getElementById('dev-inventory-list');
+  box.innerHTML = '';
+  if (!run){ box.innerHTML = '<p class="dim-note">No active expedition.</p>'; return; }
+  if (!run.inventory.length){ box.innerHTML = '<p class="dim-note">Inventory is empty.</p>'; return; }
+  run.inventory.forEach(item=>{
+    const def = ITEM_DEFS[item.key];
+    const row = document.createElement('div');
+    row.className = 'dev-inv-row';
+    row.innerHTML = `<span>${def.name} <span class="rarity-${def.rarity}">(${RARITY_LABEL[def.rarity]})</span></span>`;
+    const removeBtn = document.createElement('button');
+    removeBtn.className = 'ghost-btn';
+    removeBtn.textContent = 'Remove';
+    removeBtn.onclick = ()=>{
+      run.inventory = run.inventory.filter(it=>it.uid!==item.uid);
+      run.battleDeck = run.battleDeck.filter(u=>u!==item.uid);
+      renderHud();
+      renderDevMenu();
+    };
+    row.appendChild(removeBtn);
+    box.appendChild(row);
+  });
+}
+
+function wireDevMenu(){
+  document.getElementById('dev-btn').onclick = openDevMenu;
+  document.getElementById('dev-close-btn').onclick = closeDevMenu;
+
+  // --- Resources ---
+  document.getElementById('dev-hp-set').onclick = ()=>{
+    if (!run) return;
+    const v = parseInt(document.getElementById('dev-hp-input').value, 10);
+    if (isNaN(v)) return;
+    run.hp = Math.max(0, v);
+    renderHud();
+    if (run.hp<=0 && !run.over) endExpedition('death');
+  };
+  document.getElementById('dev-hp-full').onclick = ()=>{
+    if (!run) return;
+    run.hp = PLAYER_MAX_HP;
+    renderHud();
+  };
+  document.getElementById('dev-ichor-set').onclick = ()=>{
+    if (!run) return;
+    const v = parseInt(document.getElementById('dev-ichor-input').value, 10);
+    if (isNaN(v)) return;
+    run.ichor = Math.max(0, Math.min(run.maxIchor, v));
+    updateDarknessState();
+    renderHud();
+  };
+  document.getElementById('dev-ichor-full').onclick = ()=>{
+    if (!run) return;
+    run.ichor = run.maxIchor;
+    updateDarknessState();
+    renderHud();
+  };
+  document.getElementById('dev-maxichor-set').onclick = ()=>{
+    const v = parseInt(document.getElementById('dev-maxichor-input').value, 10);
+    if (isNaN(v) || v<1) return;
+    save.maxIchor = v; persistSave();
+    if (run){ run.maxIchor = v; run.ichor = Math.min(run.ichor, v); renderHud(); }
+    toast(`Max Ichor set to ${v}.`);
+    renderDevMenu();
+  };
+  document.getElementById('dev-maxichor-reset').onclick = ()=>{
+    // Resets both the permanent capacity AND which depths have already
+    // had their one-time Refine claimed — a true reset of that whole
+    // progression system, not just the number.
+    save.maxIchor = 10; save.usedIchorDepths = []; persistSave();
+    if (run){ run.maxIchor = 10; run.ichor = Math.min(run.ichor, 10); renderHud(); }
+    toast('Max Ichor progress reset to 10 (Refine history cleared too).');
+    renderDevMenu();
+  };
+
+  // --- Inventory ---
+  document.getElementById('dev-item-add').onclick = ()=>{
+    if (!run) return;
+    const key = document.getElementById('dev-item-select').value;
+    if (key) addItemToInventory(key); // reuses the normal full-inventory (discard) flow too
+    renderDevMenu();
+  };
+  document.getElementById('dev-inventory-clear').onclick = ()=>{
+    if (!run) return;
+    run.inventory = [];
+    run.battleDeck = [];
+    renderHud();
+    renderDevMenu();
+  };
+
+  // --- Map & Combat ---
+  document.getElementById('dev-reveal-map').onclick = ()=>{
+    if (!run || !run.nodes) return;
+    Object.values(run.nodes).forEach(n=>{ n.revealed = true; });
+    if (mapScene) mapScene.refresh();
+    toast('Entire map revealed.');
+  };
+  document.getElementById('dev-toggle-darkness').onclick = ()=>{
+    if (!run) return;
+    run.darkness = !run.darkness;
+    if (run.darkness) run.darknessMovesLeft = 3;
+    renderHud();
+  };
+  document.getElementById('dev-win-combat').onclick = ()=>{
+    if (!combat) return;
+    combat.enemy.hp = 0;
+    closeDevMenu();
+    winCombat();
+  };
+  document.getElementById('dev-jump-depth').onclick = ()=>{
+    if (!run || !run.nodes) return;
+    const depth = parseInt(document.getElementById('dev-depth-input').value, 10);
+    if (isNaN(depth)) return;
+    const candidates = Object.values(run.nodes).filter(n=>n.depth===depth);
+    if (!candidates.length){ toast(`No nodes exist at depth ${depth} (map goes to ${MAX_DEPTH}).`); return; }
+    const target = candidates[0];
+    run.currentNodeId = target.id;
+    target.revealed = true; target.everVisited = true;
+    target.connections.forEach(id=>{ run.nodes[id].revealed = true; });
+    if (target.depth > run.maxDepthReached) run.maxDepthReached = target.depth;
+    renderHud();
+    mapScene.loadRun(); // instant reposition — this is a debug teleport, not a normal move
+    closeDevMenu();
+  };
+  document.getElementById('dev-test-drop').onclick = ()=>{
+    if (!run) return;
+    const depth = parseInt(document.getElementById('dev-depth-input').value, 10)
+      || (run.currentNodeId ? run.nodes[run.currentNodeId].depth : 1);
+    const key = grantRandomItem(depth);
+    flushGrantedItems(); // this is a direct test roll, not part of an outcome-modal flow
+    const def = ITEM_DEFS[key];
+    toast(`Depth ${depth} roll: ${def.name} (${RARITY_LABEL[def.rarity]})`);
+    renderDevMenu();
+  };
+
+  // --- Save ---
+  document.getElementById('dev-reset-save').onclick = ()=>{
+    try { localStorage.removeItem(SAVE_KEY); } catch(e){ /* storage unavailable */ }
+    save = { maxIchor:10, usedIchorDepths:[] };
+    if (run){ run.maxIchor = 10; run.ichor = Math.min(run.ichor, 10); renderHud(); }
+    toast('All save data reset.');
+    renderDevMenu();
+  };
+}
+
+/* =========================================================================
+   BOOT
+   ========================================================================= */
+
+document.getElementById('open-inv-btn').onclick = ()=> openInventoryScreen('drawer');
+document.getElementById('inv-close-btn').onclick = closeInventoryScreen;
+document.getElementById('inv-enter-btn').onclick = ()=>{ closeInventoryScreen(); enterDungeon(); };
+document.getElementById('equip-confirm-btn').onclick = confirmEquipmentSelection;
+document.getElementById('end-turn-btn').onclick = endPlayerTurn;
+wireDevMenu();
+
+game = new Phaser.Game({
+  type: Phaser.AUTO,
+  parent: 'map-canvas',
+  width: 800,
+  height: 900,
+  backgroundColor: '#0b0d10',
+  scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
+  scene: [MapScene],
+});
+
+renderStartScreen();
+renderHud();
+syncMapInputState();
+
+})();
+</script>
+</body>
+</html>
