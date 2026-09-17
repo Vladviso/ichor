@@ -360,6 +360,7 @@
   .card.type-attack .card-art svg { color: var(--rust); }
   .card.type-skill .card-art svg { color: var(--teal); }
   .card .card-desc { font-size: 11px; color: var(--text-dim); line-height: 1.3; }
+  .card .card-desc .stat-boosted { color: var(--amber); font-weight: 700; }
   #pile-counts { font-size: 11px; color: var(--text-dim); padding: 0 16px 10px; text-align: right; }
 
   /* ---------- Buttons row on start/results ---------- */
@@ -572,7 +573,7 @@
 
 const CARD_DEFS = {
   // Attacks
-  Throw:       { name:'Throw',        cost:1, type:'attack', damage:1,  desc:'Deal 1 damage' },
+  Throw:       { name:'Throw',        cost:0, type:'attack', damage:1,  desc:'Deal 1 damage' },
   Flurry:      { name:'Flurry',       cost:0, type:'attack', damage:3,  desc:'Deal 3 damage' },
   Stab:        { name:'Stab',         cost:1, type:'attack', damage:4,  desc:'Deal 4 damage' },
   Slash:       { name:'Slash',        cost:1, type:'attack', damage:6,  desc:'Deal 6 damage' },
@@ -580,7 +581,7 @@ const CARD_DEFS = {
   Bash:        { name:'Bash',         cost:1, type:'attack', damage:2, weaken:true, desc:'Deal 2 damage. Enemy deals half damage next attack' },
 
   // Defense
-  Brace:       { name:'Brace',        cost:1, type:'skill', block:2,  desc:'Gain 2 Block' },
+  Brace:       { name:'Brace',        cost:0, type:'skill', block:2,  desc:'Gain 2 Block' },
   Block:       { name:'Block',        cost:1, type:'skill', block:5,  desc:'Gain 5 Block' },
   Parry:       { name:'Parry',        cost:1, type:'skill', block:3, weaken:true,  desc:'Gain 3 Block. Enemy deals half damage next attack' },
   ShieldWall:  { name:'Shield Wall',  cost:2, type:'skill', block:12, desc:'Gain 15 Block' },
@@ -629,6 +630,7 @@ const ITEM_ICON_SVG = {
   ReinforcedBuckle: icon(`<path d="M10.8808 2.66211v1.4355h8.9902v2.59581c1.0106.10688 1.6775.909 1.67 1.71875-.0077.80913-.6731 1.60053-1.67 1.70703v2.539h-8.9903v1.4767h11.6818V2.66211H10.8806zM1.26562 5.26167v1.168H18.7031V5.26561H9.71275v-.00394zm22.46478 0v1.168h7.2794v-1.168zm2.3183 2.32625c-.4109 0-.7325.31956-.7325.73044 0 .41081.3217.7325.7325.7325.4109 0 .7305-.32169.7305-.7325 0-.41063-.3196-.73044-.7305-.73044m4.1269 0c-.4108 0-.7304.31956-.7304.73044 0 .41081.3197.7325.7305.7325.4109 0 .7325-.32169.7325-.7325 0-.41063-.3216-.7305-.7325-.7305zm-15.0331.26169c-.695 0-.8229.31137-.8243.56062-.0012.24907.1138.55263.8243.55263h4.4981c.6116 0 .7298-.2925.7323-.5625s-.093-.55075-.7323-.55075h-4.4982zM1.26562 10.3106v1.1679H18.7031v-1.1679zm22.46478 0v1.1679h7.2794v-1.1679zM7.33975 17.7129v1.4356H16.33v2.537c.9717.1355 1.6091.92 1.6016 1.7109-.0075.7899-.6436 1.5602-1.6016 1.6953v2.6172H7.33975v1.4765H19.0214V17.7128H7.33975zM1.416 20.3691v6.1035h13.7459v-1.3594h-3.6288c-1.18 0-1.99704-.8358-1.99216-1.7265.00487-.8907.82146-1.7207 1.99216-1.7207h3.629v-1.2968H1.41594zm18.7734 0v6.1035h10.7715v-6.1035zm2.7558 1.9903c.585 0 1.0586.4756 1.0586 1.0606s-.4734 1.0585-1.0585 1.0585-1.0606-.4735-1.0606-1.0586c0-.5852.4755-1.0606 1.0606-1.0606zm4.83 0c.5852 0 1.0587.4756 1.0587 1.0606s-.4735 1.0585-1.0586 1.0585-1.0606-.4735-1.0606-1.0586c0-.5852.4755-1.0606 1.0606-1.0606zm-16.2421.4746c-.695 0-.8229.3094-.8242.5585-.0013.2493.1137.5529.8242.5529h4.4961c.6117 0 .7319-.2907.7344-.5607.0025-.2698-.095-.5506-.7344-.5506h-4.4961z"/>`),
   EmberCore:      icon(`<path d="m12.575 2 .8625 3.4375h5.125L19.425 2zm-1.0625.365-6.935 5.20375L7.9125 8.4l4.4437-2.66813zm8.975 0-.8438 3.36687L24.0875 8.4l3.3375-.83125zM13.15 6.5625 8.5625 9.31875V22.6812l4.5875 2.7563h5.7l4.5875-2.7563V9.31875L18.85 6.5625zM4 8.575v14.85l3.4375-.8625V9.4375zm24 0-3.4375.8625v13.125L28 23.425zm-12.0063.15c-.9125.9125-1.3624 1.8188-.4562 3.1812C16.8 13.8 21.475 15.15 21.4562 19.1875c0 2.725-2.2812 4.0875-5.4625 4.0875-3.1812 0-5.4562-2.275-5.4562-4.5437 0-.9063.4562-1.8251 1.8187-2.7313-.9125 2.275.0001 3.6375 1.3688 3.6375 1.3563 0 2.2687-1.3625 2.2687-2.275 0-2.2688-2.7249-2.725-2.7249-5.4563 0-1.4562.9062-2.72495 2.7249-3.1812M7.9125 23.6l-3.335.8312 6.935 5.2063.8437-3.3688zm16.175 0-4.4438 2.6687.8438 3.3688 6.9375-5.2063zm-10.65 2.9625L12.575 30h6.85l-.8625-3.4375z"/>`),
   VoidglassCore:  icon(`<path d="m25.8419 1.26562-.7169.25L5.31066 8.42l-.40832.1425.02538.42969L6.11128 29.9044l.04313.7577.71675-.25 19.81434-6.9044.4063-.1425-.0234-.4316-1.1836-20.91016-.043-.75782zm-1.9708 1.89844-2.7109 4.04688L9.86328 11.1719 7.56453 9.63875c4.63877.78215 12.30127-3.28063 16.07027-6.39263zm1.002 1.2305.9862 17.44534-3.082-2.0547-.2617-4.7794c1.1604-2.8389 2.0281-7.14636 2.3575-10.61124m-3.965 4.23438.6056 11.01166-10.4297 3.6563-.1738-3.1544c3.0051.565 5.1946-.539 6.5214-2.3906-1.7384-.2138-2.899-1.9365-2.6934-3.7675.1984-1.7661 1.5614-3.2033 3.2325-3.2696.1133-.0042.2268-.0023.3398.0059.1537.011.3023.035.4472.0684-.0845-.4359-.1994-.8653-.3437-1.28516zM7.36128 10.9062l1.85356 1.2363.65438 11.9259-2.71294 4.0507-.01175-.2285c1.50913-6.3325 2.29625-13.5953.21688-16.9844zm10.75592 1.4141c-.8167-.0077-1.6591.7543-1.7812 1.8419-.1261 1.1225.5206 1.9422 1.3612 2.0019.8408.0596 1.7353-.7153 1.8615-1.8379.126-1.1227-.5227-1.9425-1.3634-2.002-.0262-.0019-.0517-.0038-.0781-.004zm4.0098 8.4356 3.0802 2.0547-15.93367 5.5506c3.01907-1.6597 6.44667-4.0108 8.47467-6.0703l4.3787-1.5351z"/>`),
+  FireArrows:  icon(`<path d="m3.61719 1.33008.67375.67387.01562-.01562L19.0117 16.6954l.3223-1.5743.0664-.3241.3125-.1113 1.414-.4942.5353-.1875.2031.5293 4.1914 10.875.4727 1.2266-1.2267-.4706-10.8906-4.1758-.5331-.2052.1933-.537.5117-1.4317.1094-.3085.3222-.0664 1.8379-.3769L2.04288 4.25195l.004-.00187-.97657-.97656v1.65237l5.75975 5.75971c-1.93687.255-4.04643-.4103-5.5-2.57808-.360747 2.81998 1.71669 4.46358 4.22469 5.63078 8.92875 4.1555 3.91125 9.6447-1.3125 4.2695 1.47431 8.3883 17.37475 14.241 23.64655 9.6817 5.08-3.693 1.7743-19.86755-7.7853-22.33392 2.2403 1.61337.2488 2.47525-2.2402 2.18162 2.0897 1.1575 3.3687 2.7014 1.7617 4.1054-1.5922 1.3913-3.9245-1.228-4.2344-3.54871-.4885-3.65794-.8456-5.58812-5.6581-5.38281 1.9603 1.54062 2.286 3.29037 1.6777 4.76175L5.26956 1.33008zM20.9784 15.4805l-.5662.1993-.7463 3.6367-.076.3789-.377.0762-3.6406.746-.2091.586 9.1309 3.4982-3.5156-9.1212z"/>`),
 };
 
 /* Small illustrations for the combat cards themselves, so they're
@@ -698,22 +700,24 @@ const ITEM_DEFS = {
   
   // Defense - COMMON
   Shield:           { name:'Shield',            rarity:'common',   category:'defense', dropWeight:1, cards:[['Block',3],['Bash',2],['ShieldWall',1]], exploration:'Can protect against certain hazards' },
-  Buckler:          { name:'Buckler',           rarity:'common',   category:'defense', dropWeight:1, cards:[['Parry',3],['Dodge',2],['Block',1]]},
-  LeatherArmor:     { name:'Leather Armor',     rarity:'common',   category:'defense', dropWeight:1, cards:[['Dodge',3],['Block',1]]},
+  Buckler:          { name:'Buckler',           rarity:'common',   category:'defense', dropWeight:1, cards:[['Parry',2],['Dodge',2],['Block',2]]},
+  LeatherArmor:     { name:'Leather Armor',     rarity:'common',   category:'defense', dropWeight:1, cards:[['Dodge',3],['Block',2]]},
+  PlateArmor:       { name:'Full Plate',        rarity:'common',   category:'defense', dropWeight:1, cards:[['Block',5]] },
   
   // Defense - UNCOMMON
-  PlateArmor:       { name:'Full Plate',        rarity:'uncommon', category:'defense', dropWeight:1, cards:[['Block',4]] },
-  RingProtection:   { name:'Ring of Protection',rarity:'uncommon', category:'defense', dropWeight:1, cards:[['Block',2]] },
+  RingProtection:   { name:'Ring of Protection',rarity:'uncommon', category:'defense', dropWeight:1, cards:[['Block',2],['ShieldWall',1]] },
   ReinforcedBuckle: { name:'Reinforced Buckle', rarity:'uncommon', category:'defense', dropWeight:1, cards:[['Brace',2]],
-                      passive:{ desc:'Your Block grants 2 additional Block.', mods:[{card:'Block', block:2}] } },
+                      passive:{ desc:'Your Snap grants 1 additional Block.', mods:[{card:'Snap', block:1}] } },
 
   // Defense - RARE
-  RingForceField:   { name:'Ring of Force Field',rarity:'rare',    category:'defense', dropWeight:0.6, cards:[['ShieldWall',1],['Brace',1]], 
-                      passive:{ desc:'Your Block grants 1 additional Block.', mods:[{card:'Block', block:1}] } },
+  RingForceField:   { name:'Ring of Force Field',rarity:'rare',    category:'defense', dropWeight:1, cards:[['ShieldWall',1],['Brace',1]], 
+                      passive:{ desc:'Your Block grants 2 additional Block.', mods:[{card:'Block', block:2}] } },
   
   // Utility - COMMON
-  Torch:            { name:'Torch',             rarity:'common',   category:'utility', dropWeight:1.1, cards:[['Ignite',1]], exploration:'Can interact with objects requiring fire.' },
-  Rope:             { name:'Rope',              rarity:'common',   category:'utility', dropWeight:0.8, cards:[['Bind',1]], exploration:'Can cross gaps and descend through shafts.', consumable:true },
+  Torch:            { name:'Torch',             rarity:'common',   category:'utility', dropWeight:1.1, cards:[['Ignite',1]], exploration:'Can interact with objects requiring fire' },
+  FireArrows:       { name:'Fire Arrows',       rarity:'uncommon', category:'utility', dropWeight:1,   cards:[['Throw',2]],
+                      passive:{ desc:'Your Shoot and Snap apply 2 Burn', mods:[{card:'Shoot', burn:2},{card:'Snap', burn:2}] } },
+  Rope:             { name:'Rope',              rarity:'common',   category:'utility', dropWeight:0.8, cards:[['Bind',1]], exploration:'Can cross gaps and descend through shafts', consumable:true },
 };
 
 
@@ -900,7 +904,7 @@ function newExpeditionState(chosenKeys){
 const CLASS_DEFS = {
   warrior: {
     name: 'Warrior',
-    items: ['Longsword','Greataxe','Shield','PlateArmor','Rope','Torch'],
+    items: ['Longsword','Club','Shield','PlateArmor','Rope','Torch'],
     blurb: 'Heavy weapons and heavier armor. Hits hard, blocks harder.',
   },
   rogue: {
@@ -1325,7 +1329,7 @@ function cardTileHtml(cardId, count){
   return `<div class="card type-${def.type} static">
     <div class="card-top"><span class="card-name">${prefix}${def.name}</span><span class="cost">${def.cost}</span></div>
     <div class="card-art">${CARD_ICON_SVG[cardId]}</div>
-    <div class="card-desc">${def.desc}</div>
+    <div class="card-desc">${describeCardWithMods(cardId)}</div>
   </div>`;
 }
 function countDeckCards(){
@@ -1815,7 +1819,16 @@ function showDiscardChoice(newKey){
 
 let combat = null;
 
-function getActiveMods(){
+// Every passive mod currently in effect, based on whichever items are in
+// the Battle Deck right now. Deliberately safe to call whether or not a
+// fight is happening: outside combat this is recomputed fresh on every
+// call (so the Inventory screen and item previews always show live,
+// accurate numbers — see bonusFor/describeCardWithMods), while combat
+// takes one SNAPSHOT of it at the moment the fight starts (see
+// startCombat) so the numbers can't shift mid-fight just because the
+// player is looking at other screens.
+function computeActiveMods(){
+  if (!run) return [];
   const mods = [];
   run.battleDeck.forEach(uid=>{
     const item = run.inventory.find(it=>it.uid===uid);
@@ -1824,21 +1837,39 @@ function getActiveMods(){
   });
   return mods;
 }
-function bonusFor(cardId, field){
-  if (!combat || !combat.activeMods) return 0;
-  return combat.activeMods.reduce((sum,m)=> sum + (m.card===cardId ? (m[field]||0) : 0), 0);
+function getActiveMods(){
+  return computeActiveMods();
 }
+// Uses the combat snapshot while a fight is in progress, otherwise falls
+// back to a live recomputation — see computeActiveMods above.
+function bonusFor(cardId, field){
+  const mods = (combat && combat.activeMods) ? combat.activeMods : computeActiveMods();
+  return mods.reduce((sum,m)=> sum + (m.card===cardId ? (m[field]||0) : 0), 0);
+}
+// Builds a card's full description from its CURRENT actual numbers —
+// base value plus whatever passive bonuses currently apply — rather than
+// a fixed, hand-written string. This is what makes a card's displayed
+// damage/block/burn always match what it will really do: a card doesn't
+// need a nonzero base in a field to gain one from a passive (e.g. Fire
+// Arrows adds Burn to Shoot and Snap, which have no Burn of their own)
+// — each line below checks "does a base value exist OR is there a bonus"
+// rather than gating on the base value alone. Any number actually
+// boosted by a passive gets wrapped in .stat-boosted so it's visually
+// obvious which values on the card aren't just the printed base stat.
 function describeCardWithMods(cardId){
   const def = CARD_DEFS[cardId];
   const dmgB = bonusFor(cardId,'damage'), blkB = bonusFor(cardId,'block'), burnB = bonusFor(cardId,'burn');
-  if (!dmgB && !blkB && !burnB) return def.desc;
+  const fmt = (base, bonus) => {
+    const total = (base||0) + bonus;
+    return bonus ? `<span class="stat-boosted">${total}</span>` : `${total}`;
+  };
   const parts = [];
-  if (def.damage!=null) parts.push(`Deal ${def.damage+dmgB} damage.`);
-  if (def.block!=null) parts.push(`Gain ${def.block+blkB} Block.`);
-  if (def.burn!=null) parts.push(`Apply ${def.burn+burnB} Burn.`);
+  if (def.damage!=null || dmgB) parts.push(`Deal ${fmt(def.damage, dmgB)} damage.`);
+  if (def.block!=null || blkB) parts.push(`Gain ${fmt(def.block, blkB)} Block.`);
+  if (def.burn!=null || burnB) parts.push(`Apply ${fmt(def.burn, burnB)} Burn.`);
   if (def.draw) parts.push('Draw a card.');
   if (def.weaken) parts.push('Enemy deals half damage next attack.');
-  return parts.join(' ');
+  return parts.length ? parts.join(' ') : def.desc;
 }
 
 function startCombat(def, node, isElite){
@@ -1912,18 +1943,18 @@ function playCard(uid){
   combat.hand.splice(idx,1);
   combat.discardPile.push(card.cardId);
 
-  if (def.damage){
+  if (def.damage || bonusFor(card.cardId,'damage')){
     // The enemy's own Block (see resolveEnemyActions) absorbs the
     // player's damage exactly the way the player's Block absorbs the
     // enemy's attacks below in enemyTurn — same mechanic, mirrored.
-    const totalDmg = def.damage + bonusFor(card.cardId,'damage');
+    const totalDmg = (def.damage||0) + bonusFor(card.cardId,'damage');
     const eBlock = combat.enemy.block || 0;
     const blocked = Math.min(eBlock, totalDmg);
     combat.enemy.block = eBlock - blocked;
     combat.enemy.hp = Math.max(0, combat.enemy.hp - (totalDmg - blocked));
   }
-  if (def.block) combat.playerBlock = (combat.playerBlock||0) + def.block + bonusFor(card.cardId,'block');
-  if (def.burn) combat.enemy.burn = (combat.enemy.burn||0) + def.burn + bonusFor(card.cardId,'burn');
+  if (def.block || bonusFor(card.cardId,'block')) combat.playerBlock = (combat.playerBlock||0) + (def.block||0) + bonusFor(card.cardId,'block');
+  if (def.burn || bonusFor(card.cardId,'burn')) combat.enemy.burn = (combat.enemy.burn||0) + (def.burn||0) + bonusFor(card.cardId,'burn');
   if (def.weaken) combat.enemy.weakenedNextAttack = true;
   if (def.draw) drawCards(def.draw);
 
