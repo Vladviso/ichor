@@ -339,7 +339,7 @@
   #end-turn-btn { background: var(--teal); color: #051216; border: none; font-weight: 600; padding: 9px 18px; border-radius: var(--radius); cursor: pointer; min-height: 40px; }
   #end-turn-btn:hover { filter: brightness(1.1); }
 
-  #hand-zone { padding: 12px; overflow-x: auto; white-space: nowrap; display: flex; gap: 10px; align-items: flex-end; min-height: 172px; -webkit-overflow-scrolling: touch; }
+  #hand-zone { padding: 12px; overflow-x: auto; white-space: nowrap; display: grid; grid-template-columns: repeat(auto-fill, minmax(128px,1fr)); gap: 8px; align-items: flex-end; min-height: 172px; -webkit-overflow-scrolling: touch; }
   .card {
     display: inline-flex; flex-direction: column; justify-content: space-between;
     height: 192px; white-space: normal;
